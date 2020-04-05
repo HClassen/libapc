@@ -1,5 +1,4 @@
 # Libapc
-___
 
 I made this project in order to understand the machanisms of [libuv](https://github.com/libuv/libuv), in doing so I copied some parts of the code of libuv.
 If you want to use an event loop in production go to libuv.
@@ -8,7 +7,6 @@ Howerver if your interested in an simpler version of an event loop feel free to 
 and tested the code on linux (epoll is used as poll mechanism), so other operating systems are not suported.
 
 ## What can libapc do
-___
 
 There are 5 handle types:
     Base handle `apc_handle` (each handle below is also an `apc_handle`),
@@ -28,12 +26,10 @@ request type.
 A few example programs are provided in the example folder.
 
 ## How does it work
-___
 
 ![Alt diagram of the inner workings](./docs/apc_loop_diagram.svg)
 
 ## Usage
-___
 
 A Makefile is provided. Create the static library `libapc.a` with `make lib`. Include the header file in your project an link to the library as well as to pthread while compiling.
 
