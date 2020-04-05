@@ -171,6 +171,7 @@ The `apc_on_file_op` callback type gets called on a finnished read or write oper
 The bufs pointer either contains the read data or the written data. Allocated memory should be freed
 here.
 
+
 The `apc_on_timeout` callback type gets called on a due timer.
 ```C
     void (*apc_on_timeout)(apc_timer *handle) 
@@ -190,11 +191,13 @@ Initialize a TCP handle with:
 ```
 No socket is created in this call.
 
+
 Bind the TCP handle to `port` with:
 ```C
    int apc_tcp_bind(apc_tcp *tcp, const char *port)
 ```
 In this function the socket is created.
+
 
 Connect the TCP handle to a `host` on `service` with:
 ```C
@@ -202,12 +205,14 @@ Connect the TCP handle to a `host` on `service` with:
 ```
 Service can be a port number or a protocoll like http.
 
+
 Write to the TCP handle wit:
 ```C
     int apc_tcp_write(apc_tcp *tcp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb)
 ```
 The content of bufs is copied so only the memory pointed to by each buf with base needs to
 stay valid till the callback.
+
 
 Get a callback called each time there is data to be read from the TCP handle with:
 ```C
