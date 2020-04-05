@@ -3,4 +3,5 @@ src/.vscode
 src/util.c
 src/util.h
 main.c
+libapc.a
 apc
