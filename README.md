@@ -60,7 +60,7 @@ functions to libapc so that they get used for internal memory allocations.
 Default is `free(), malloc(), calloc(), realloc`. This function doesn't accept `NULL` values.
 ```C
    int apc_set_allocator(									
-	void (*cust_free)(void *ptr), void *(*malloc)(size_t size), 
+	void (*cust_free)(void *ptr), 
 	void *(*cust_malloc)(size_t size),							
 	void *(*cust_calloc)(size_t n, size_t size),				
 	void *(*cust_realloc)(void *ptr, size_t size)				

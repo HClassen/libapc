@@ -38,7 +38,7 @@ static apc_allocator apc__allocater = {
 };
 
 int apc_set_allocator(											\
-	void (*cust_free)(void *ptr), void *(*malloc)(size_t size), \
+	void (*cust_free)(void *ptr), 								\
 	void *(*cust_malloc)(size_t size),							\
 	void *(*cust_calloc)(size_t n, size_t size),				\
 	void *(*cust_realloc)(void *ptr, size_t size)				\
