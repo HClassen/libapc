@@ -326,7 +326,7 @@ There are currently 7 different `apc_file_flags`:
         APC_FILE_FLAGS_MAX = 128
     }
 ```
-These flags can be combined with `|`. If you pass the `APC_OPEN_CREATE` or `APC_OPEN_TMP` flag then you must also pass either the `APC_OPEN_W` or `APC_OPEN_RW` flag. If you pass the `APC_OPEN_CREATE` flag and the by `path` specified file already exists an error is returned. If you pass the `APC_OPEN_TMP` flag, then the `path` parameter should be a path to a directory. The temporary file can be made premanent with `apc_file_link_tmp`.
+These flags can be combined with `|`. If you pass the `APC_OPEN_CREATE` or `APC_OPEN_TMP` flag then you must also pass either the `APC_OPEN_W` or `APC_OPEN_RW` flag. If you pass the `APC_OPEN_CREATE` flag and the file specified by `path` already exists an error is returned. If you pass the `APC_OPEN_TMP` flag, then the `path` parameter should be a path to a directory. The temporary file can be made premanent with `apc_file_link_tmp`.
 
 Fill the `struct apc_stat_ *stat` member of the File handle with:
 ```C
