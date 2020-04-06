@@ -9,14 +9,14 @@ and tested the code on linux (epoll is used as poll mechanism), so other operati
 1. [What can libapc do](#what-can-libapc-do)
 2. [How does it work](#how-does-it-work)
 3. [Usage](#usage)
-..1. [Basic functions](#basic-functions)
-..2. [Basic types](#basic-types)
-..3. [Callback types](#callback-types)
-..4. [TCP functions](#tpc-functions)
-..5. [UDP functions](#udp-functions)
-..6. [File functions](#file-functions)
-..7. [Timer functions](#timer-functions)
-..8. [Submitting work](#submitting-work)
+⋅⋅1. [Basic functions](#basic-functions)
+⋅⋅2. [Basic types](#basic-types)
+⋅⋅3. [Callback types](#callback-types)
+⋅⋅4. [TCP functions](#tpc-functions)
+⋅⋅5. [UDP functions](#udp-functions)
+⋅⋅6. [File functions](#file-functions)
+⋅⋅7. [Timer functions](#timer-functions)
+⋅⋅8. [Submitting work](#submitting-work)
 
 ## What can libapc do
 
