@@ -322,8 +322,7 @@ There are currently 7 different `apc_file_flags`:
         APC_OPEN_CREATE = 8, 
         APC_OPEN_APPEND = 16, 
         APC_OPEN_TMP = 32, 
-        APC_OPEN_TRUNC = 64,
-        APC_FILE_FLAGS_MAX = 128
+        APC_OPEN_TRUNC = 64
     }
 ```
 These flags can be combined with `|`. If you pass the `APC_OPEN_CREATE` or `APC_OPEN_TMP` flag then you must also pass either the `APC_OPEN_W` or `APC_OPEN_RW` flag. If you pass the `APC_OPEN_CREATE` flag and the file specified by `path` already exists an error is returned. If you pass the `APC_OPEN_TMP` flag, then the `path` parameter should be a path to a directory. The temporary file can be made premanent with `apc_file_link_tmp`.
