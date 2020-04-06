@@ -3,7 +3,7 @@
 I made this project in order to understand the machanisms of [libuv](https://github.com/libuv/libuv), in doing so I copied some parts of the code of libuv.
 If you want to use an event loop in production go to libuv.
 
-Howerver if your interested in an simpler version of an event loop feel free to check this project out. I written 
+However if your interested in an simpler version of an event loop feel free to check this project out. I written 
 and tested the code on linux (epoll is used as poll mechanism), so other operating systems are not suported.
 
 1. [What can libapc do](#what-can-libapc-do)
