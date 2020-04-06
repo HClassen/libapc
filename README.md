@@ -6,6 +6,18 @@ If you want to use an event loop in production go to libuv.
 Howerver if your interested in an simpler version of an event loop feel free to check this project out. I written 
 and tested the code on linux (epoll is used as poll mechanism), so other operating systems are not suported.
 
+1. [What can libapc do](#what-can-libapc-do)
+2. [How does it work](#how-does-it-work)
+3. [Usage](#usage)
+..1. [Basic functions](#basic-functions)
+..2. [Basic types](#basic-types)
+..3. [Callback types](#callback-types)
+..4. [TCP functions](#tpc-functions)
+..5. [UDP functions](#udp-functions)
+..6. [File functions](#file-functions)
+..7. [Timer functions](#timer-functions)
+..8. [Submitting work](#submitting-work)
+
 ## What can libapc do
 
 There are 5 handle types:
@@ -74,7 +86,6 @@ Init a basic buffer with:
 The base pointer isnt't freed by libapc, that is the users responsibility.
 
 ### Basic types
-___
 
 The loop type.
 ```C
@@ -91,6 +102,15 @@ touched by libapc.
         apc_handle_type type; 
     }
 ```
+
+Each request has the same 'public' members:
+```C
+    req{
+        void *data;
+        apc_req_type type:
+    }
+```
+The data pointer is meant for some user data and gets not touched by libapc.
 
 A write request used for writing to a TCP or UDP handle.
 ```C
@@ -121,8 +141,6 @@ The basic buffer used by libapc. The base pointer an len are set by the user.
 ```
 
 ### Callback types
-___
-
 The `apc_alloc` callback type gets called each time before data is read from either a TCP or UDP handle.
 The memory should be freed in the folowed `apc_on_read` callback.
 ```C
@@ -168,7 +186,7 @@ The `apc_on_file_op` callback type gets called on a finnished read or write oper
 ```C
     void (*apc_on_file_op)(apc_file *file, apc_file_op_req *req, apc_buf *bufs, ssize_t nbytes)
 ```
-The bufs pointer either contains the read data or the written data. Allocated memory should be freed
+The `bufs` pointer either contains the data read or the data written. Allocated memory should be freed
 here.
 
 
@@ -178,39 +196,38 @@ The `apc_on_timeout` callback type gets called on a due timer.
 ```
 
 ### TCP functions
-___
 
-The TCP handle type
+The TCP handle type:
 ```C
     apc_tcp
 ```
 
 Initialize a TCP handle with:
 ```C
-   int apc_tcp_init(apc_loop *loop, apc_tcp *tcp)
+    int apc_tcp_init(apc_loop *loop, apc_tcp *tcp)
 ```
 No socket is created in this call.
 
 
 Bind the TCP handle to `port` with:
 ```C
-   int apc_tcp_bind(apc_tcp *tcp, const char *port)
+    int apc_tcp_bind(apc_tcp *tcp, const char *port)
 ```
-In this function the socket is created.
+In this function a socket is created.
 
 
 Connect the TCP handle to a `host` on `service` with:
 ```C
-   int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const char *service, apc_on_connected cb) 
+    int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const char *service, apc_on_connected cb) 
 ```
-Service can be a port number or a protocoll like http.
+Service can be a port number or a protocoll like http. In this function a socket is created.
 
 
 Write to the TCP handle wit:
 ```C
     int apc_tcp_write(apc_tcp *tcp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb)
 ```
-The content of bufs is copied so only the memory pointed to by each buf with base needs to
+The content of `bufs` is copied so only the memory pointed to by each bufs base member needs to
 stay valid till the callback.
 
 
@@ -221,32 +238,182 @@ Get a callback called each time there is data to be read from the TCP handle wit
 
 Stop invoking a callback if there is data to be read from the TCP handle with:
 ```C
-   int apc_tcp_stop_read(apc_tcp *tcp) 
+    int apc_tcp_stop_read(apc_tcp *tcp) 
 ```
 
+Start listening for incomming connections on TCP handle with:
 ```C
-    
+    int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb)
 ```
-### UDP functions
-___
 
-UDP handle
+Accept a new connection on a TCP handle with:
+```C
+    int apc_accept(apc_tcp *server, apc_tcp *client) 
+```
+If this function is not called in the `apc_on_connection` callback, then the `server` handle stops listening for new connections.
+The `client` handle needs to stay valid outside the callback function, thus should be allocated with `malloc` / `calloc` and should be intialized with `apc_tcp_init`.
+
+### UDP functions
+
+The UDP handle type:
 ```C
     apc_udp 
 ```
 
-### File functions
-___
+Initialize a UDP handle with:
+```C
+    int apc_udp_init(apc_loop *loop, apc_udp *udp) 
+```
+No socket is created in this call.
 
-File handle
+Bind the UDP handle to `port` with:
+```C
+    int apc_udp_bind(apc_udp *udp, const char *port) 
+```
+In this function a socket is created.
+
+Connect the UDP handle to a `host` on `service` with:
+```C
+    int apc_udp_connect(apc_udp *udp, const char *host, const char *service)
+```
+Obviously this establishes not a connection like the TCP version of it. This function only fills in the internal `struct sockaddr_storage` to be used in subsequent `apc_udp_write` calls.
+In this function a socket is created.
+
+Write to either the remote host previously connected to or respond to an incomming massage with:
+```C
+    int apc_udp_write(apc_udp *udp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb) 
+```
+The content of `bufs` is copied so only the memory pointed to by each bufs base member needs to
+stay valid till the callback.
+
+Get a callback called each time there is data to be read from the UDP handle with:
+```C
+    int apc_udp_start_read(apc_udp *udp, apc_alloc alloc, apc_on_read on_read)  
+```
+
+Stop invoking a callback if there is data to be read from the UDP handle with:
+```C
+    int apc_udp_stop_read(apc_udp *udp)
+```
+
+### File functions
+
+The File handle type:
 ```C
     apc_file
 ```
 
-### Timer functions
-___
+Initialize a File handle with:
+```C
+    int apc_file_init(apc_loop *loop, apc_file *file)
+```
+No file descriptor is created in this call.
 
-Timer handle
+Open a file specified by `path` with access specified by `flags` with:
+```C
+    int apc_file_open(apc_file *file, const char *path, apc_file_flags flags)
+```
+There are currently 7 different `apc_file_flags`:
+```C
+    enum apc_file_flags {
+        APC_OPEN_R = 1, 
+        APC_OPEN_W = 2, 
+        APC_OPEN_RW = 4, 
+        APC_OPEN_CREATE = 8, 
+        APC_OPEN_APPEND = 16, 
+        APC_OPEN_TMP = 32, 
+        APC_OPEN_TRUNC = 64,
+        APC_FILE_FLAGS_MAX = 128
+    }
+```
+These flags can be combined with `|`. If you pass the `APC_OPEN_CREATE` or `APC_OPEN_TMP` flag then you must also pass either the `APC_OPEN_W` or `APC_OPEN_RW` flag. If you pass the `APC_OPEN_CREATE` flag and the by `path` specified file already exists an error is returned. If you pass the `APC_OPEN_TMP` flag, then the `path` parameter should be a path to a directory. The temporary file can be made premanent with `apc_file_link_tmp`.
+
+Fill the `struct apc_stat_ *stat` member of the File handle with:
+```C
+    int apc_file_stat(apc_file *file)
+```
+`struct apc_stat_` is defined as:
+```C
+    struct apc_stat_{
+        dev_t st_dev;
+        ino_t st_ino;
+        mode_t st_mode;
+        nlink_t st_nlink;
+        uid_t st_uid;
+        gid_t st_gid; 
+        dev_t st_rdev;
+        off_t st_size;
+        long int st_blksize;
+        blkcnt_t  st_blocks;
+    } 
+```
+
+Read from a File handle to `bufs` with:
+```C
+    int apc_file_read(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb)
+```
+This function is basically the async variant of read/readv.
+
+Write to a File handle from `bufs` with:
+```C
+    int apc_file_write(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb)
+```
+The content of `bufs` is copied so only the memory pointed to by each bufs base member needs to
+stay valid till the callback.
+This function is basically the async variant of write/writev.
+
+Read from a File handle with an offset `offset` with:
+```C
+    int apc_file_pread(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb, off_t offset)
+```
+The offset ist measured from the start of the file, so any negative values will return an error. The file offset doesn't change by calling this function (no `lseek` is involved).
+This function is basically the async variant of pread/preadv.
+
+Write to a File handle with an offset `offset` with:
+```C
+    int apc_file_pwrite(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb, off_t offset)
+```
+The offset ist measured from the start of the file, so any negative values will return an error. The file offset doesn't change by calling this function (no `lseek` is involved).
+This function is basically the async variant of pwrite/pwritev.
+
+If a temporary file was opened it can be made permanent with:
+```C
+    int apc_file_link_tmp(apc_file *file, const char *path)
+```
+The `path` parameter should specify the new location and name for the file.
+
+### Timer functions
+
+The Timer handle type:
 ```C
     apc_timer
+```
+
+Initialize a Timer handle with:
+```C
+    int apc_timer_init(apc_loop *loop, apc_timer *timer)
+```
+
+Start a Timer handle with:
+```C
+    int apc_timer_start(apc_timer *timer, time_t duration, int restart, apc_on_timeout cb)
+```
+The unit of the `duration` parameter are seconds. If the timer should restart after the time out pass `1` as `reastart` value `0` otherwise.
+
+Stop a Timer handle with:
+```C
+    int apc_timer_stop(apc_timer *timer)
+```
+
+Restart a Timer handl with:
+```C
+    int apc_timer_restart(apc_timer *timer)
+```
+To restart a Timer handle it needs to be already active.
+
+### Submitting work
+
+Submit some Work with:
+```C
+    int apc_add_work(apc_loop *loop, apc_work_req *req, apc_work work, apc_work done)
 ```
