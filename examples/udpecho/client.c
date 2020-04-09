@@ -35,6 +35,7 @@ void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     }
 
     printf("recvd: %s\n", buf->base);
+    free(buf->base);
     apc_close(handle);
 }
 

@@ -13,8 +13,8 @@ typedef struct _queue{
 
 #define QUEUE_INIT(q)                       \
     do{                                     \
-        (q)->prev = q;                      \
-        (q)->next = q;                      \
+        (q)->prev = (q);                    \
+        (q)->next = (q);                    \
     }while(0)
 
 #define QUEUE_EMPTY(q)                      \

@@ -106,7 +106,7 @@ ssize_t fd_write(int fd, const apc_buf *bufs, const size_t nbufs){
 	}else if(nbufs > 1){
 		assert(sizeof(apc_buf) == sizeof(struct iovec));
 		struct iovec *iovec = (struct iovec *) bufs;
-		int iovec_count = nbufs > MY_IOV_MAX ? MY_IOV_MAX : nbufs; 
+		int iovec_count = nbufs > MY_IOV_MAX ? MY_IOV_MAX : nbufs;
 		return writev(fd, iovec, iovec_count);
 	}
 	return APC_EINVAL;
@@ -121,8 +121,8 @@ ssize_t fd_recvfrom(int fd, const apc_buf *bufs, const size_t nbufs, const struc
 		struct iovec *iovec = (struct iovec *) bufs;
 		int iovec_count = nbufs > MY_IOV_MAX ? MY_IOV_MAX : nbufs; 
 		struct msghdr msg = (struct msghdr) {0};
-		msg.msg_name = &peeraddr;
-		msg.msg_namelen = sizeof(peeraddr);
+		msg.msg_name = (struct sockaddr_storage *) peeraddr;
+		msg.msg_namelen = sizeof(*peeraddr);
 		msg.msg_iov = iovec;
 		msg.msg_iovlen = iovec_count;
 		return recvmsg(fd, &msg, 0);
@@ -137,10 +137,10 @@ ssize_t fd_sendto(int fd, const apc_buf *bufs, const size_t nbufs, const struct 
 	}else if(nbufs > 1){
 		assert(sizeof(apc_buf) == sizeof(struct iovec));
 		struct iovec *iovec = (struct iovec *) bufs;
-		int iovec_count = nbufs > MY_IOV_MAX ? MY_IOV_MAX : nbufs; 
+		size_t iovec_count = nbufs > MY_IOV_MAX ? MY_IOV_MAX : nbufs; 
 		struct msghdr msg = (struct msghdr) {0};
-		msg.msg_name = &peeraddr;
-		msg.msg_namelen = sizeof(peeraddr);
+		msg.msg_name = (struct sockaddr_storage *) peeraddr;
+		msg.msg_namelen = sizeof(*peeraddr);
 		msg.msg_iov = iovec;
 		msg.msg_iovlen = iovec_count;
 		return sendmsg(fd, &msg, 0);

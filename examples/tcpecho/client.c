@@ -34,10 +34,12 @@ void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     }
 
     printf("recvd: %s\n", buf->base);
+    free(buf->base);
     apc_close(handle);
 }
 
 void written(apc_write_req *req, apc_buf *bufs, int error){
+    free(req);
     if(error < 0){
         printf("%s\n", apc_strerror(error));
         apc_close(req->handle);

@@ -336,7 +336,7 @@ static int core_advance_write_queue(apc_tcp *handle, apc_write_req *req, size_t 
 
 	apc_buf *buf = req->bufs + req->write_index;
 	size_t len = 0;
-	size_t index = 0;
+	size_t index = req->write_index;
 
 	do{
 		len = n < buf->len ? n : buf->len;
@@ -382,12 +382,12 @@ static void core_tcp_write(apc_tcp *handle){
 	queue *q = QUEUE_NEXT(get_queue(&handle->write_queue));
 	apc_write_req *req = container_of(q, apc_write_req, write_queue);
 	assert(req->handle == (apc_handle *) handle);
-
+	
 	ssize_t n = 0;
 	do{
-		n = fd_write(handle->watcher.fd, req->bufs, req->nbufs);
+		n = fd_write(handle->watcher.fd, req->bufs + req->write_index, req->nbufs - req->write_index);
 	}while(n == -1 && errno == EINTR);
-
+	
 	if(n == -1 && !(errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)){
 		req->err = APC_EFDWRITE;
 		core_advance_write_queue_error(handle, req);

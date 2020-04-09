@@ -26,6 +26,7 @@ void written(apc_write_req *req, apc_buf *bufs, int error){
 
 void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     if(nread == APC_EOF){
+        printf("client disconnected\n");
         free(buf->base);
         return;
     }
@@ -48,6 +49,7 @@ void new_connection(apc_tcp *server, int error){
         return;
     }
 
+    printf("new connection\n");
     apc_tcp *client = malloc(sizeof(apc_tcp));
     apc_tcp_init(server->loop, client);
     apc_accept(server, client);

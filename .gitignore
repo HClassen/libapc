@@ -1,4 +1,8 @@
 .vscode
+examples/tcpecho/server
+examples/tcpecho/client
+examples/udpecho/server
+examples/udpecho/client
 src/.vscode
 src/util.c
 src/util.h
