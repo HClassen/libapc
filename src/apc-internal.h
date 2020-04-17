@@ -69,11 +69,13 @@
     do{                                                                                         \
         apc_deregister_handle_(handle, (handle)->loop);                                         \
         QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
-        QUEUE_INIT(&(handle)->handle_queue);                                                    \
-        QUEUE_ADD_TAIL(&(handle)->loop->closing_queue, &(handle)->handle_queue);                \
+        if((cb) != NULL){                                                                       \
+            QUEUE_INIT(&(handle)->handle_queue);                                                \
+            QUEUE_ADD_TAIL(&(handle)->loop->closing_queue, &(handle)->handle_queue);            \
+        }                                                                                       \
         (handle)->data = NULL;                                                                  \
         (handle)->loop = NULL;                                                                  \
-        (handle)->closing_cb = cb;                                                              \
+        (handle)->closing_cb = (cb);                                                            \
         (handle)->flags = HANDLE_CLOSING;                                                       \
     }while(0)                                                                                   \
     

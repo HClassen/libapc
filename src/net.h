@@ -34,6 +34,7 @@
     apc_handle_type type;                                               \
     void *handle_queue[2];                                              \
     unsigned int flags;                                                 \
+    apc_on_closing closing_cb;                                          \
 
 #define NETWORK_FIELDS                                                  \
     apc_event_watcher watcher;                                          \

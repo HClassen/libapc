@@ -22,34 +22,34 @@ void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     if(nread == APC_EOF){
         printf("EOF\n");
         free(buf->base);
-        apc_close(handle);
+        apc_close(handle, NULL);
         return;
     }
 
     if(nread < 0){
         printf("%s\n", apc_strerror(nread));
         free(buf->base);
-        apc_close(handle);
+        apc_close(handle, NULL);
         return;
     }
 
     printf("recvd: %s\n", buf->base);
     free(buf->base);
-    apc_close(handle);
+    apc_close(handle, NULL);
 }
 
 void written(apc_write_req *req, apc_buf *bufs, int error){
     free(req);
     if(error < 0){
         printf("%s\n", apc_strerror(error));
-        apc_close(req->handle);
+        apc_close(req->handle, NULL);
     }
 }
 
 void connected(apc_tcp *tcp, apc_connect_req *req, int error){
     if(error < 0){
         printf("%s\n", apc_strerror(error));
-        apc_close((apc_handle *) tcp);
+        apc_close((apc_handle *) tcp, NULL);
         return;
     }
 

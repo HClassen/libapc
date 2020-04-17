@@ -10,6 +10,10 @@ type:\n\
 client to send the first cmd-line argument \
 as a message\n";
 
+void closed(apc_handle *handle){
+    free(handle);
+}
+
 void my_alloc(apc_handle *handle, apc_buf *buf){
     buf->base = calloc(64, sizeof(char));
     buf->len = 63 * sizeof(char);
@@ -18,7 +22,7 @@ void my_alloc(apc_handle *handle, apc_buf *buf){
 void written(apc_write_req *req, apc_buf *bufs, int error){
     if(error < 0){
         printf("written (%s)\n", apc_strerror(error));
-        apc_close(req->handle);
+        apc_close(req->handle, closed);
     }
 
     free(bufs->base);
@@ -34,7 +38,7 @@ void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     if(nread < 0){
         printf("recvd (%s)\n", apc_strerror(nread));
         free(buf->base);
-        apc_close(handle);
+        apc_close(handle, closed);
         return;
     }
 
@@ -51,7 +55,6 @@ void new_connection(apc_tcp *server, int error){
 
     printf("new connection\n");
     apc_tcp *client = malloc(sizeof(apc_tcp));
-    apc_tcp_init(server->loop, client);
     apc_accept(server, client);
     apc_tcp_start_read(client, my_alloc, recvd);
 }

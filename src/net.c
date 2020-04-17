@@ -148,7 +148,7 @@ int net_write(apc_net *net, apc_write_req *req, const apc_buf bufs[], size_t nbu
     memcpy(req->bufs, bufs, nbufs * sizeof(apc_buf));
     req->nbufs = nbufs;
     req->write_index = 0;
-    net->write_queue_size += apc_size_bufs(bufs, nbufs);
+    net->write_queue_size += apc_size_bufs(bufs, nbufs);      
     QUEUE_ADD_TAIL(&net->write_queue, &req->write_queue);
     return 0;
 }
