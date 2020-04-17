@@ -68,7 +68,7 @@ static int file_open(apc_file *file, const char *path, apc_file_flags flags){
     size_t size = strlen(path);
     char *fpath = NULL;
     if(file->fd == -1 && (errno == EISDIR || errno == ENOENT) && (flags & APC_OPEN_TMP)){
-        fpath = malloc((14 + size + 1) * sizeof(char));
+        fpath = apc_malloc((14 + size + 1) * sizeof(char));
         if(fpath == NULL){
             return APC_ENOMEM;
         }
@@ -90,7 +90,7 @@ static int file_open(apc_file *file, const char *path, apc_file_flags flags){
     }
 
     if(fpath == NULL){
-        fpath = malloc((size + 1) * sizeof(char));
+        fpath = apc_malloc((size + 1) * sizeof(char));
         if(fpath == NULL){
             return APC_ENOMEM;
         }
@@ -109,6 +109,7 @@ int apc_file_init(apc_loop *loop, apc_file *file){
     apc_handle_init_(file, loop, APC_FILE);
     file->fd = -1;
     file->active_work = 0;
+    file->oflags = 0;
     file->flags = 0;
     file->path = NULL;
     file->stat = NULL;
@@ -160,11 +161,11 @@ void file_close(apc_file *file){
     file->fd = -1;     
     file->oflags = 0;           
     if(file->path != NULL){       
-        free((char *) file->path);
+        apc_free((char *) file->path);
         file->path = NULL;        
     }                               
     if(file->stat != NULL){       
-        free(file->stat);         
+        apc_free(file->stat);         
         file->stat = NULL;        
     }                               
 }
@@ -190,7 +191,7 @@ static void file_write(apc_work_req *req){
 int apc_file_stat(apc_file *file){
     struct apc_stat_ *apcst = file->stat;
     if(apcst == NULL){
-        apcst = malloc(sizeof(struct apc_stat_));
+        apcst = apc_malloc(sizeof(struct apc_stat_));
     }
     
     if(apcst == NULL){
@@ -226,7 +227,7 @@ static void file_after_op(apc_work_req *req){
     }
     
     if(tmp != NULL){
-        free(tmp);
+        apc_free(tmp);
     }
 
     if(!QUEUE_EMPTY(&file->work_queue)){
@@ -252,7 +253,7 @@ int apc_file_pread(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t 
     assert(nbufs > 0);
     assert(req != NULL);
 
-    req->bufs = malloc(nbufs * sizeof(apc_buf));
+    req->bufs = apc_malloc(nbufs * sizeof(apc_buf));
     if(req->bufs == NULL){
         return APC_ENOMEM;
     }
@@ -282,7 +283,7 @@ int apc_file_pread(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t 
         return 0;
     }
     file_read((apc_work_req *) req);
-    free(req->bufs);
+    apc_free(req->bufs);
     if(req->err < 0){
         return APC_EFDREAD;
     }
@@ -295,7 +296,7 @@ int apc_file_pwrite(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t
     assert(bufs != NULL);
     assert(nbufs > 0);
 
-    req->bufs = malloc(nbufs * sizeof(apc_buf));
+    req->bufs = apc_malloc(nbufs * sizeof(apc_buf));
     if(req->bufs == NULL){
         return APC_ENOMEM;
     }
@@ -325,7 +326,7 @@ int apc_file_pwrite(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t
         return 0;
     }
     file_write((apc_work_req *) req);
-    free(req->bufs);
+    apc_free(req->bufs);
     if(req->err < 0){
         req->err = APC_EFDWRITE;
     }

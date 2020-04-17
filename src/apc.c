@@ -55,11 +55,26 @@ static int get_timeout(apc_loop *loop){
     return (int) diff;
 }
 
+static void run_closing(apc_loop *loop){
+    while(!QUEUE_EMPTY(&loop->closing_queue)){
+        queue *q = QUEUE_NEXT(&loop->closing_queue);
+        QUEUE_REMOVE(q);
+        QUEUE_INIT(q);
+        apc_handle *handle = container_of(q, apc_handle, handle_queue);
+        assert(handle->flags & HANDLE_CLOSING);
+        handle->flags = 0;
+        if(handle->closing_cb){
+            handle->closing_cb(handle);
+        }
+    }
+}
+
 int apc_loop_init(apc_loop *loop){
     assert(loop != NULL);
 
     QUEUE_INIT(&loop->handle_queue);
     QUEUE_INIT(&loop->work_queue);
+    QUEUE_INIT(&loop->closing_queue);
     loop->active_handles = 0;
     loop->active_requests = 0;
     loop->now = time(NULL);
@@ -113,15 +128,10 @@ void apc_loop_run(apc_loop *loop){
         run_timers(loop);
         int timeout = get_timeout(loop);
         apc_reactor_poll(&loop->reactor, timeout);
+        run_closing(loop);
     }
     
     tpool_cleanup();    
-    while(!QUEUE_EMPTY(&loop->handle_queue)){
-        queue *q = QUEUE_NEXT(&loop->handle_queue);
-        apc_handle *handle = container_of(q, apc_handle, handle_queue);
-        QUEUE_REMOVE(q);
-        apc_close(handle);
-    }
     pthread_mutex_destroy(&loop->workmtx);
     apc_event_watcher_close(&loop->reactor, &loop->wakeup_watcher);
     close(loop->wakeup_fd);
@@ -166,7 +176,7 @@ apc_buf apc_buf_init(void *base, size_t len){
     return (apc_buf) {base, len};
 }
 
-int apc_close(apc_handle *handle){
+int apc_close(apc_handle *handle, apc_on_closing cb){
     assert(handle);
     switch(handle->type){
         case APC_UDP:
@@ -184,7 +194,7 @@ int apc_close(apc_handle *handle){
         default:
             return APC_EUNKNOWNHANDLE;
     }
-    apc_handle_close_(handle);
+    apc_handle_close_(handle, cb);                                                      
     return 0;
 }
 

@@ -76,6 +76,7 @@ typedef void (*apc_on_write)(apc_write_req *req, apc_buf *bufs, int error);
 typedef void (*apc_work)(apc_work_req *work);
 typedef void (*apc_on_file_op)(apc_file *file, apc_file_op_req *req, apc_buf *bufs, ssize_t nbytes);
 typedef void (*apc_on_timeout)(apc_timer *handle);
+typedef void (*apc_on_closing)(apc_handle *handle);
 
 typedef struct apc_reactor_ apc_reactor;
 typedef struct apc_event_watcher_ apc_event_watcher;
@@ -105,6 +106,7 @@ struct acp_buf_{
 struct apc_loop_{
     void *work_queue[2];
     void *handle_queue[2];
+    void *closing_queue[2];
     apc_reactor reactor;
     size_t active_handles;
     size_t active_requests;
@@ -128,6 +130,7 @@ typedef enum apc_handle_type_ {APC_BASE_HANDLE, APC_TCP, APC_UDP, APC_FILE, APC_
     apc_handle_type type;                                               \
     void *handle_queue[2];                                              \
     unsigned int flags;                                                 \
+    apc_on_closing closing_cb;                                          \
 
 struct apc_handle_{
     HANDLE_FIELDS
@@ -255,7 +258,7 @@ typedef enum apc_file_flags_ {
 
 int apc_loop_init(apc_loop *loop);
 void apc_loop_run(apc_loop *loop);
-int apc_close(apc_handle *handle);
+int apc_close(apc_handle *handle, apc_on_closing cb);
 
 const char *apc_strerror(enum apc_error_code_ err);
 

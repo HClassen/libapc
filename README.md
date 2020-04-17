@@ -58,8 +58,9 @@ Run the loop with:
 
 Close any handle with (typecast to `apc_handle *`):
 ```C
-    int apc_close(apc_handle *handle)
+    int apc_close(apc_handle *handle, apc_on_closing cb)
 ```
+The signature for the `apc_on_closing` callback type is explained below. `cb` can be `NULL`.
 
 Each function return either 0 on succes or an error code.
 This function returns a short explanation for a given error code err:
@@ -189,11 +190,16 @@ The `apc_on_file_op` callback type gets called on a finnished read or write oper
 The `bufs` pointer either contains the data read or the data written. Allocated memory should be freed
 here.
 
-
 The `apc_on_timeout` callback type gets called on a due timer.
 ```C
     void (*apc_on_timeout)(apc_timer *handle) 
 ```
+
+The `apc_on_closing` callback type gets called after the `handle` was closed.
+```C
+    void (*apc_on_closing)(apc_handle *handle)
+```
+In this callback allocated memory for a handle should be freed.
 
 ### TCP functions
 
@@ -251,7 +257,7 @@ Accept a new connection on a TCP handle with:
     int apc_accept(apc_tcp *server, apc_tcp *client) 
 ```
 If this function is not called in the `apc_on_connection` callback, then the `server` handle stops listening for new connections.
-The `client` handle needs to stay valid outside the callback function, thus should be allocated with `malloc` / `calloc` and should be intialized with `apc_tcp_init`.
+The `client` handle needs to stay valid outside the callback function, thus should be allocated with `malloc` / `calloc`. An initialization with `apc_tcp_init` is not necessary.
 
 ### UDP functions
 

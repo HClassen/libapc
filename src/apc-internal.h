@@ -16,6 +16,7 @@
 #define HANDLE_ACTIVE   1
 #define HANDLE_WRITABLE 2
 #define HANDLE_READABLE 4
+#define HANDLE_CLOSING  8
 
 #ifdef DEBUG
     #define DEBUG_MSG(msg, ...) do{fprintf(stdout,"%s:%d:%s(): " msg, __FILE__, __LINE__, __func__, ##__VA_ARGS__);}while(0)
@@ -57,19 +58,23 @@
 #define apc_handle_init_(handle, loop_, type_)                                                  \
     do{                                                                                         \
         (handle)->data = NULL;                                                                  \
+        (handle)->closing_cb = NULL;                                                            \
         (handle)->loop = loop_;                                                                 \
         (handle)->type = type_;                                                                 \
         (handle)->flags = 0;                                                                    \
         QUEUE_ADD_TAIL(&(loop)->handle_queue, &(handle)->handle_queue);                         \
     }while(0)                                                                                   \
 
-#define apc_handle_close_(handle)                                                               \
+#define apc_handle_close_(handle, cb)                                                           \
     do{                                                                                         \
         apc_deregister_handle_(handle, (handle)->loop);                                         \
+        QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
+        QUEUE_INIT(&(handle)->handle_queue);                                                    \
+        QUEUE_ADD_TAIL(&(handle)->loop->closing_queue, &(handle)->handle_queue);                \
         (handle)->data = NULL;                                                                  \
         (handle)->loop = NULL;                                                                  \
-        (handle)->flags = 0;                                                                    \
-        QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
+        (handle)->closing_cb = cb;                                                              \
+        (handle)->flags = HANDLE_CLOSING;                                                       \
     }while(0)                                                                                   \
     
 

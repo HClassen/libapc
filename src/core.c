@@ -489,10 +489,10 @@ void wakeup_io(apc_reactor *reactor, apc_event_watcher *w, unsigned int events){
 		queue *q = QUEUE_NEXT(&wq);
 		apc_work_req *req = container_of(q, apc_work_req, work_queue);
 		QUEUE_REMOVE(q);
+		apc_deregister_request_(req, loop);
 		if(req->done != NULL){
 			req->done(req);
 		}
-		apc_deregister_request_(req, loop);
 	}
 
 	apc_event_watcher_register(reactor, w, APC_POLLIN);
