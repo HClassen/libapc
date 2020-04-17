@@ -90,11 +90,12 @@ static int file_open(apc_file *file, const char *path, apc_file_flags flags){
     }
 
     if(fpath == NULL){
-        fpath = malloc(size * sizeof(char));
+        fpath = malloc((size + 1) * sizeof(char));
         if(fpath == NULL){
             return APC_ENOMEM;
         }
-        memcpy(fpath, path, size + 1);
+        memcpy(fpath, path, size);
+        fpath[size] = 0;
     }
 
     file->path = fpath;

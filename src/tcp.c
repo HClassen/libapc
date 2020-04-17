@@ -44,6 +44,7 @@ int apc_tcp_init(apc_loop *loop, apc_tcp *tcp){
     tcp->on_connection = NULL;
     tcp->connect_req = NULL;
     tcp->accepted_fd = -1;
+    tcp->watcher.fd = -1;
     return 0;
 }
 

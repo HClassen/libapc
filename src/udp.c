@@ -41,6 +41,7 @@ int apc_udp_init(apc_loop *loop, apc_udp *udp){
     apc_handle_init_(udp, loop, APC_UDP);
     apc_net_init_(udp);
     udp->peer = (struct sockaddr_storage) {0};
+    udp->watcher.fd = -1;
     return 0;
 }
 

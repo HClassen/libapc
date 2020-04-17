@@ -50,7 +50,7 @@ static int get_timeout(apc_loop *loop){
         return 0;
     }
 
-    time_t diff = (t->end - loop->now)/*  * 1000 */;
+    time_t diff = (t->end - loop->now) * 1000;
     diff = diff > INT_MAX ? INT_MAX : diff;
     return (int) diff;
 }
@@ -112,7 +112,7 @@ void apc_loop_run(apc_loop *loop){
         loop->now = time(NULL);
         run_timers(loop);
         int timeout = get_timeout(loop);
-        apc_reactor_poll(&loop->reactor, timeout * 1000);
+        apc_reactor_poll(&loop->reactor, timeout);
     }
     
     tpool_cleanup();    
