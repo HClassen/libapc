@@ -24,7 +24,7 @@ int tpool_running(){
 
 int tpool_add_work(apc_work_req *req){
     pthread_mutex_lock(&mutex);
-    QUEUE_ADD_TAIL(&wq, get_queue(&req->work_queue));
+    QUEUE_ADD_TAIL(&wq, &req->work_queue);
     if(idle_threads > 0){
         pthread_cond_signal(&cond);
     }
@@ -61,7 +61,7 @@ static void *thread_routine(/* void *arg */){
         req->work(req);
 
         pthread_mutex_lock(&req->loop->workmtx);
-        QUEUE_ADD_TAIL(get_queue(&req->loop->work_queue), get_queue(&req->work_queue));
+        QUEUE_ADD_TAIL(&req->loop->work_queue, &req->work_queue);
         pthread_mutex_unlock(&req->loop->workmtx);
 
         write(req->loop->wakeup_fd, buf, len);

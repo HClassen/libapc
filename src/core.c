@@ -1,25 +1,20 @@
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include <poll.h>
 #include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <sys/socket.h>
 
 #include "core.h"
 #include "apc.h"
-#include "core-linux.h"
 #include "net.h"
 #include "fd.h"
 #include "fs.h"
 #include "apc-internal.h"
-
-#define MY_IOV_MAX UIO_MAXIOV
+#include "reactor/reactor.h"
 
 typedef struct apc_allocator_ apc_allocator;
 
@@ -99,121 +94,12 @@ size_t apc_size_bufs(const apc_buf bufs[], size_t nbufs){
 	return size;
 }
 
-static void maybe_resize(apc_loop *loop, size_t len){
-	fd_watcher **watchers = NULL;
-/* 	void* fake_watcher_list = NULL;
-	void* fake_watcher_count = NULL; */
-
-	if(len <= loop->nwatchers){
-		return;
-	}
-
-/* 	if(loop->watchers != NULL) {
-		fake_watcher_list = loop->watchers[loop->nwatchers];
-		fake_watcher_count = loop->watchers[loop->nwatchers + 1];
-  	} */
-
-	size_t nwatchers = len + 10;
-	watchers = apc_realloc(loop->watchers, nwatchers * sizeof(loop->watchers[0]));
-
-	if(watchers == NULL){
-		abort();
-	}
-
-	loop->watchers = watchers;
-
-	for(size_t i = loop->nwatchers; i<nwatchers; i++){
-		loop->watchers[i] = NULL;
-	}
-
-/* 	loop->watchers[nwatchers] = fake_watcher_list;
-	loop->watchers[nwatchers + 1] = fake_watcher_count; */
-	loop->nwatchers = nwatchers;
-}
-
-void fd_watcher_init(fd_watcher *w, fd_watcher_cb cb, int fd){
-	assert(cb != NULL);
-	assert(fd >= -1);
-	QUEUE_INIT(get_queue(&w->watcher_queue));
-
-	w->cb = cb;
-	w->fd = fd;
-	w->events = 0;
-	w->registered = 0;
-}
-
-void fd_watcher_start(apc_loop *loop, fd_watcher *w, unsigned int events){
-	assert(0 == (events & ~(POLLIN | POLLOUT)));
-	assert(0 != events);
-	assert(w->fd >= 0);
-	assert(w->fd < INT_MAX);
-
-	w->events |= events;
-	maybe_resize(loop, (size_t) (w->fd + 1));
-
-	if(QUEUE_EMPTY(&w->watcher_queue)){
-		QUEUE_ADD_TAIL(get_queue(&loop->watcher_queue), get_queue(&w->watcher_queue));
-	}
-
-	if(loop->watchers[w->fd] == NULL){
-		loop->watchers[w->fd] = w;
-		loop->nfds += 1;
-	}
-}
-
-void fd_watcher_stop(apc_loop *loop, fd_watcher *w, unsigned int events){
-	assert(0 == (events & ~(POLLIN | POLLOUT)));
-  	assert(0 != events);
-
-	if(w->fd == -1){
-		return;
-	}
-
-	assert(w->fd >= 0);
-
-	if((unsigned) w->fd >= loop->nwatchers){
-		return;
-	}
-
-	w->events &= ~events;
-
-	if(w->events == 0){
-		QUEUE_REMOVE(get_queue(&w->watcher_queue));
-		QUEUE_INIT(get_queue(&w->watcher_queue));
-
-		if(loop->watchers[w->fd] != NULL){
-			assert(loop->watchers[w->fd] == w);
-			assert(loop->nfds > 0);
-			loop->watchers[w->fd] = NULL;
-			loop->nfds -= 1;
-			w->registered = 0;
-		}
-	}else if(QUEUE_EMPTY(get_queue(&w->watcher_queue))){
-		QUEUE_ADD_TAIL(get_queue(&loop->watcher_queue), get_queue(&w->watcher_queue));
-	}
-}
-
-void fd_watcher_close(apc_loop *loop, fd_watcher *w){
-	fd_watcher_stop(loop, w, POLLIN | POLLOUT);
-
-	if(w->fd >= 0){
-		invalidate_fd(loop, w->fd);
-	}
-}
-
-int fd_watcher_active(const fd_watcher *w, unsigned int events){
-  assert(0 == (events & ~(POLLIN | POLLOUT)));
-  assert(0 != events);
-  return 0 != (w->events & events);
-}
-
-void fd_watcher_server(apc_loop *loop, fd_watcher *w, unsigned int events){
-	assert(events & POLLIN);
+void fd_watcher_server(apc_reactor *reactor, apc_event_watcher *w, unsigned int events){
+	assert(events & APC_POLLIN);
 	apc_tcp *handle = container_of(w, apc_tcp, watcher);
 
 	assert(handle->accepted_fd == -1);
-
-	fd_watcher_start(loop, w, POLLIN);
+	// fd_watcher_start(loop, w, POLLIN);
 
 	while(handle->watcher.fd != -1){
 		assert(handle->accepted_fd == -1);
@@ -235,10 +121,10 @@ void fd_watcher_server(apc_loop *loop, fd_watcher *w, unsigned int events){
 		handle->on_connection(handle, 0);
 
 		if(handle->accepted_fd != -1){
-			fd_watcher_stop(loop, w, POLLIN);
+			apc_event_watcher_deregister(reactor, w, APC_POLLIN);
 			handle->flags &= ~HANDLE_READABLE;
-			if(!fd_watcher_active(&handle->watcher, POLLOUT)){
-				apc_deregister_handle_(handle, loop);
+			if(!apc_event_watcher_active(&handle->watcher, APC_POLLOUT)){
+				apc_deregister_handle_(handle, handle->loop);
 			}
 			close(handle->accepted_fd);
 			return;
@@ -258,8 +144,8 @@ static void core_tcp_connect(apc_tcp *handle){
 
 	handle->connect_req = NULL;
 	if(err < 0/*  || QUEUE_EMPTY(&handle->write_queue) */){
-		fd_watcher_stop(handle->loop, &handle->watcher, POLLOUT);
-		if(!fd_watcher_active(&handle->watcher, POLLIN)){
+		apc_event_watcher_deregister(&handle->loop->reactor, &handle->watcher, APC_POLLOUT);
+		if(!apc_event_watcher_active(&handle->watcher, APC_POLLIN)){
 			apc_deregister_handle_(handle, handle->loop);
 		}
 		err = APC_ECONNECT;
@@ -299,21 +185,21 @@ static void core_tcp_read(apc_tcp *handle){
 
 		if(recbytes < 0){
 			if(errno == EAGAIN || errno == EWOULDBLOCK){
-				fd_watcher_start(handle->loop, &handle->watcher, POLLIN);
+				// apc_event_watcher_register(&handle->loop->reactor, &handle->watcher, APC_POLLIN);
 				handle->on_read((apc_handle *) handle, &buf, APC_EWOULDBLOCK);
 				return;
 			}
 
-			fd_watcher_stop(handle->loop, &handle->watcher, POLLIN);
-			if(!fd_watcher_active(&handle->watcher, POLLOUT)){
+			apc_event_watcher_deregister(&handle->loop->reactor, &handle->watcher, APC_POLLIN);
+			if(!apc_event_watcher_active(&handle->watcher, APC_POLLOUT)){
 				apc_deregister_handle_(handle, handle->loop);
 			}
 			handle->flags &= ~HANDLE_READABLE;
 			handle->on_read((apc_handle *) handle, &buf, APC_EFDREAD);
 			return;
 		}else if(recbytes == 0){
-			fd_watcher_stop(handle->loop, &handle->watcher, POLLIN);
-			if(!fd_watcher_active(&handle->watcher, POLLOUT)){
+			apc_event_watcher_deregister(&handle->loop->reactor, &handle->watcher, APC_POLLIN);
+			if(!apc_event_watcher_active(&handle->watcher, APC_POLLOUT)){
 				apc_deregister_handle_(handle, handle->loop);
 			}
 
@@ -367,19 +253,19 @@ static void core_advance_write_queue_error(apc_tcp *handle, apc_write_req *req){
 }
 
 static void core_finish_write(apc_write_req *req){
-	QUEUE_REMOVE(get_queue(&req->write_queue));
-	QUEUE_ADD_TAIL(get_queue(&((apc_tcp *) req->handle)->write_done_queue), get_queue(&req->write_queue));
+	QUEUE_REMOVE(&req->write_queue);
+	QUEUE_ADD_TAIL(&((apc_tcp *) req->handle)->write_done_queue, &req->write_queue);
 }
 
 static void core_tcp_write(apc_tcp *handle){
 	assert(handle);
 	assert(handle->watcher.fd >= 0);
 
-	if(QUEUE_EMPTY(get_queue(&handle->write_queue))){
+	if(QUEUE_EMPTY(&handle->write_queue)){
 		return;
 	}
 
-	queue *q = QUEUE_NEXT(get_queue(&handle->write_queue));
+	queue *q = QUEUE_NEXT(&handle->write_queue);
 	apc_write_req *req = container_of(q, apc_write_req, write_queue);
 	assert(req->handle == (apc_handle *) handle);
 	
@@ -393,8 +279,8 @@ static void core_tcp_write(apc_tcp *handle){
 		core_advance_write_queue_error(handle, req);
 		core_finish_write(req);
 
-		fd_watcher_stop(req->handle->loop, &handle->watcher, POLLOUT);
-		if(!fd_watcher_active(&handle->watcher, POLLIN)){
+		apc_event_watcher_deregister(&req->handle->loop->reactor, &handle->watcher, APC_POLLOUT);
+		if(!apc_event_watcher_active(&handle->watcher, APC_POLLIN)){
 			apc_deregister_handle_(handle, handle->loop);
 		}
 		handle->flags &= ~ HANDLE_WRITABLE;
@@ -406,18 +292,18 @@ static void core_tcp_write(apc_tcp *handle){
 		return;
 	}
 
-	fd_watcher_start(req->handle->loop, &handle->watcher, POLLOUT);
+	// fd_watcher_start(req->handle->loop, &handle->watcher, POLLOUT);
 	return;
 }
 
 static void core_write_callbacks(apc_net *handle){
-	if(QUEUE_EMPTY(get_queue(&handle->write_done_queue))){
+	if(QUEUE_EMPTY(&handle->write_done_queue)){
 		return;
 	}
 
 	queue q;
 	QUEUE_INIT(&q);
-	QUEUE_MOVE(get_queue(&handle->write_done_queue), &q);
+	QUEUE_MOVE(&handle->write_done_queue, &q);
 	while(!QUEUE_EMPTY(&q)){
 		queue *e = QUEUE_NEXT(&q);
 		apc_write_req *req = container_of(e, apc_write_req, write_queue);
@@ -435,7 +321,7 @@ static void core_write_callbacks(apc_net *handle){
 	}
 }
 
-void fd_watcher_io(apc_loop *loop, fd_watcher *w, unsigned int events){
+void fd_watcher_tcp_io(apc_reactor *reactor, apc_event_watcher *w, unsigned int events){
 	apc_tcp *handle = container_of(w, apc_tcp, watcher);
 
 	if(handle->connect_req){
@@ -445,7 +331,7 @@ void fd_watcher_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 
 	assert(handle->watcher.fd >= 0);
 	
-	if(events & (POLLIN)){
+	if(events & APC_POLLIN){
 		core_tcp_read(handle);
 	}
 
@@ -453,13 +339,13 @@ void fd_watcher_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 		return;
 	}
 
-	if(events & (POLLOUT)){
+	if(events & APC_POLLOUT){
 		core_tcp_write(handle);
 		core_write_callbacks((apc_net *) handle);
 
 		if(QUEUE_EMPTY(&handle->write_queue)){
-			fd_watcher_stop(loop, &handle->watcher, POLLOUT);
-			if(!fd_watcher_active(&handle->watcher, POLLIN)){
+			apc_event_watcher_deregister(reactor, &handle->watcher, APC_POLLOUT);
+			if(!apc_event_watcher_active(&handle->watcher, APC_POLLIN)){
 				apc_deregister_handle_(handle, handle->loop);
 			}
 		}
@@ -467,8 +353,6 @@ void fd_watcher_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 }
 
 static void core_udp_read(apc_udp *handle){
-	assert(handle);
-
 	ssize_t recbytes = 0;
 	apc_buf buf;
 	while(handle->on_read != NULL && handle->watcher.fd != -1 && handle->flags & HANDLE_READABLE){
@@ -509,16 +393,13 @@ static void core_udp_read(apc_udp *handle){
 }
 
 static void core_udp_write(apc_udp *handle){
-	assert(handle);
-	assert(handle->watcher.fd >= 0);
-
-	if(QUEUE_EMPTY(get_queue(&handle->write_queue))){
+	if(QUEUE_EMPTY(&handle->write_queue)){
 		return;
 	}
 
 	ssize_t n = 0;
-	while(!QUEUE_EMPTY(get_queue(&handle->write_queue))){
-		queue *q = QUEUE_NEXT(get_queue(&handle->write_queue));
+	while(!QUEUE_EMPTY(&handle->write_queue)){
+		queue *q = QUEUE_NEXT(&handle->write_queue);
 		apc_write_req *req = container_of(q, apc_write_req, write_queue);
 
 		do{
@@ -534,17 +415,17 @@ static void core_udp_write(apc_udp *handle){
 		req->err = n == -1 ? APC_EFDWRITE : 0;
 		handle->write_queue_size -= apc_size_bufs(req->bufs, req->nbufs);
 
-		QUEUE_REMOVE(get_queue(&req->write_queue));
-		QUEUE_ADD_TAIL(get_queue(&handle->write_done_queue), get_queue(&req->write_queue));
+		QUEUE_REMOVE(&req->write_queue);
+		QUEUE_ADD_TAIL(&handle->write_done_queue, &req->write_queue);
 	}
 }
 
-void fd_watcher_udp_io(apc_loop *loop, fd_watcher *w, unsigned int events){
+void fd_watcher_udp_io(apc_reactor *reactor, apc_event_watcher *w, unsigned int events){
 	apc_udp *handle = container_of(w, apc_udp, watcher);
 
 	assert(handle->watcher.fd >= 0);
 	
-	if(events & (POLLIN)){
+	if(events & APC_POLLIN){
 		core_udp_read(handle);
 	}
 
@@ -552,13 +433,13 @@ void fd_watcher_udp_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 		return;
 	}
 
-	if(events & (POLLOUT)){
+	if(events & APC_POLLOUT){
 		core_udp_write(handle);
 		core_write_callbacks((apc_net *) handle);
 
 		if(QUEUE_EMPTY(&handle->write_queue)){
-			fd_watcher_stop(loop, &handle->watcher, POLLOUT);
-			if(!fd_watcher_active(&handle->watcher, POLLIN)){
+			apc_event_watcher_deregister(reactor, &handle->watcher, APC_POLLOUT);
+			if(!apc_event_watcher_active(&handle->watcher, APC_POLLIN)){
 				apc_deregister_handle_(handle, handle->loop);
 			}
 		}
@@ -570,22 +451,22 @@ void apc_flush_write_queue(apc_net *handle){
 
 	queue wq;
 	QUEUE_INIT(&wq);
-	QUEUE_MOVE(get_queue(&handle->write_queue), &wq);
+	QUEUE_MOVE(&handle->write_queue, &wq);
 	while(!QUEUE_EMPTY(&wq)){
 		queue *q = QUEUE_NEXT(&wq);
 		apc_write_req *req = NULL;
 		QUEUE_REMOVE(q);
 		req = container_of(q, apc_write_req, write_queue);
 		req->err = APC_EHANDLECLOSED;
-		QUEUE_ADD_TAIL(get_queue(&handle->write_done_queue), q);
+		QUEUE_ADD_TAIL(&handle->write_done_queue, q);
 	}
 
 	core_write_callbacks(handle);
 }
 
 
-void wakeup_io(apc_loop *loop, fd_watcher *w, unsigned int events){
-	if((!events & POLLIN)){
+void wakeup_io(apc_reactor *reactor, apc_event_watcher *w, unsigned int events){
+	if(!(events & APC_POLLIN)){
 		return;
 	}
 
@@ -599,8 +480,9 @@ void wakeup_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 	}while(n == (ssize_t) len);
 	
 	queue wq;
+	apc_loop *loop = container_of(reactor, apc_loop, reactor);
 	pthread_mutex_lock(&loop->workmtx);
-	QUEUE_MOVE(get_queue(&loop->work_queue), &wq);
+	QUEUE_MOVE(&loop->work_queue, &wq);
 	pthread_mutex_unlock(&loop->workmtx);
 
 	while(!QUEUE_EMPTY(&wq)){
@@ -613,5 +495,5 @@ void wakeup_io(apc_loop *loop, fd_watcher *w, unsigned int events){
 		apc_deregister_request_(req, loop);
 	}
 
-	fd_watcher_start(loop, w, POLLIN);
+	apc_event_watcher_register(reactor, w, APC_POLLIN);
 }

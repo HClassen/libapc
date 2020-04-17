@@ -4,13 +4,13 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <poll.h>
 #include <assert.h>
 
 #include "apc.h"
 #include "apc-internal.h"
 #include "net.h"
 #include "core.h"
+#include "reactor/reactor.h"
 
 static int tcp_socket_bind(const char *port){
 	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_STREAM, AI_PASSIVE);
@@ -40,7 +40,7 @@ int apc_tcp_init(apc_loop *loop, apc_tcp *tcp){
     assert(tcp != NULL);
 
     apc_handle_init_(tcp, loop, APC_TCP);
-    apc_net_init_(tcp, fd_watcher_io);
+    apc_net_init_(tcp);
     tcp->on_connection = NULL;
     tcp->connect_req = NULL;
     tcp->accepted_fd = -1;
@@ -67,8 +67,7 @@ int apc_tcp_bind(apc_tcp *tcp, const char *port){
         return err;
     }
 
-    tcp->watcher.fd = err;
-    tcp->watcher.cb = fd_watcher_server;
+    apc_event_watcher_init(&tcp->watcher, fd_watcher_tcp_io, err);
     return 0;
 }
 
@@ -82,15 +81,15 @@ int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const 
     if(err < 0){
         return err;
     }
+    apc_event_watcher_init(&tcp->watcher, fd_watcher_tcp_io, err);
 
     apc_request_init_(req, APC_CONNECT);
     req->connected = cb;
     req->handle = tcp;
     tcp->connect_req = req;
-    tcp->watcher.fd = err;
     apc_register_request_(req, tcp->loop);
     apc_register_handle_(tcp, tcp->loop);
-    fd_watcher_start(tcp->loop, &tcp->watcher, POLLOUT);
+    apc_event_watcher_register(&tcp->loop->reactor, &tcp->watcher, APC_POLLOUT);
     return 0;
 }
 
@@ -104,7 +103,8 @@ int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb){
         return err;
     }
     tcp->on_connection = cb; 
-    fd_watcher_start(tcp->loop, &tcp->watcher, POLLIN);
+    tcp->watcher.cb = fd_watcher_server;
+    apc_event_watcher_register(&tcp->loop->reactor, &tcp->watcher, APC_POLLIN);
     tcp->flags |= HANDLE_READABLE;
 
     apc_register_handle_(tcp, tcp->loop);
@@ -113,18 +113,18 @@ int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb){
 
 int apc_accept(apc_tcp *server, apc_tcp *client){
     assert(client != NULL);
-    assert(server->loop == client->loop);
+    apc_tcp_init(server->loop, client);
 
-    if(!(client->watcher.fd == -1 ||                  
+/*     if(!(client->watcher.fd == -1 ||                  
         client->watcher.fd == server->accepted_fd)){
         return APC_EBUSY;                                      
-    }                                                   
+    } */                                                   
     if(server->accepted_fd == -1){                    
         return APC_ECONNACCEPT;                                      
-    }                                                   
-    client->watcher.fd = (server)->accepted_fd;       
-    server->accepted_fd = -1;                         
-    fd_watcher_start(server->loop, &server->watcher, POLLIN);
+    }
+    apc_event_watcher_init(&client->watcher, fd_watcher_tcp_io, server->accepted_fd);                         
+    apc_event_watcher_register(&server->loop->reactor, &client->watcher, APC_POLLIN);     
+    server->accepted_fd = -1;
     return 0;
 }
 
@@ -164,6 +164,6 @@ int apc_tcp_write(apc_tcp *tcp, apc_write_req *req, const apc_buf bufs[], size_t
     apc_register_request_(req, tcp->loop);
     apc_register_handle_(tcp, tcp->loop);
     tcp->flags |= HANDLE_WRITABLE;
-    fd_watcher_start(tcp->loop, &tcp->watcher, POLLOUT);
+    apc_event_watcher_register(&tcp->loop->reactor, &tcp->watcher, APC_POLLOUT);
     return 0;
 }

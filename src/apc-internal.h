@@ -3,13 +3,13 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "apc.h"
 #include "queue.h"
 #include "heap.h"
 
 #define container_of(ptr, type, member) ((type *)  ((char *) ptr - offsetof(type, member)))
-#define get_queue(qs) ((queue *) (qs))
 #define get_node(timer) ((heap_node *) &(timer)->node)
 #define get_heap(loop) ((heap *) &(loop)->timerheap)
 
@@ -60,7 +60,7 @@
         (handle)->loop = loop_;                                                                 \
         (handle)->type = type_;                                                                 \
         (handle)->flags = 0;                                                                    \
-        QUEUE_ADD_TAIL(get_queue(&(loop)->handle_queue), get_queue(&(handle)->handle_queue));   \
+        QUEUE_ADD_TAIL(&(loop)->handle_queue, &(handle)->handle_queue);                         \
     }while(0)                                                                                   \
 
 #define apc_handle_close_(handle)                                                               \
@@ -69,7 +69,7 @@
         (handle)->data = NULL;                                                                  \
         (handle)->loop = NULL;                                                                  \
         (handle)->flags = 0;                                                                    \
-        QUEUE_REMOVE(get_queue(&(handle)->handle_queue));                                       \
+        QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
     }while(0)                                                                                   \
     
 
@@ -80,30 +80,12 @@
     }while(0)                                                                                   \
 
 
-#define HANDLE_FIELDS                                                                           \
-    void *data;                                                                                 \
-    apc_loop *loop;                                                                             \
-    apc_handle_type type;                                                                       \
-    queue handle_queue;                                                                         \
-    unsigned int flags;                                                                         \
+void apc_free(void *ptr);
 
-#define NETWORK_FIELDS                                                                          \
-    fd_watcher watcher;                                                                         \
-    apc_alloc alloc;                                                                            \
-    apc_on_read on_read;                                                                        \
-    queue write_queue;                                                                          \
-    size_t write_queue_size;                                                                    \
-    queue write_done_queue;                                                                     \
+void *apc_malloc(size_t size);
 
+void *apc_calloc(size_t n, size_t size);
 
-typedef struct apc_net_ apc_net;
-
-struct apc_net_{
-    HANDLE_FIELDS
-    NETWORK_FIELDS
-};
-
-#undef HANDLE_FIELDS
-#undef NETWORK_FIELDS
+void *apc_realloc(void *ptr, size_t size);
 
 #endif

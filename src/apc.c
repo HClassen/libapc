@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <assert.h>
-#include <poll.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -11,13 +10,13 @@
 #include "apc-internal.h"
 #include "core.h"
 #include "threadpool.h"
-#include "core-linux.h"
 #include "net.h"
 #include "fd.h"
 #include "fs.h"    
 #include "timer.h"
 #include "heap.h"
 #include "queue.h"
+#include "reactor/reactor.h"
 
 #define apc_loop_active_(loop)                                          \
     ((loop)->active_handles > 0 || (loop)->active_requests > 0)         \
@@ -60,19 +59,14 @@ int apc_loop_init(apc_loop *loop){
     assert(loop != NULL);
 
     QUEUE_INIT(&loop->handle_queue);
-    QUEUE_INIT(&loop->watcher_queue);
     QUEUE_INIT(&loop->work_queue);
-    loop->watchers = NULL;
-    loop->nwatchers = 0;
-    loop->nfds = 0;
     loop->active_handles = 0;
     loop->active_requests = 0;
     loop->now = time(NULL);
     loop->timerid = 0;
     heap_init((heap *) &loop->timerheap, timer_cmp);
-    loop->backend_fd = create_backend_fd();
-    int err = 0;
-    if(loop->backend_fd == -1){
+    int err = apc_reactor_init(&loop->reactor);
+    if(err == -1){
         err = APC_EFDPOLL;
         goto backenderr;
     }
@@ -88,9 +82,8 @@ int apc_loop_init(apc_loop *loop){
     if(err != 0){
         goto pipeerr;
     }
-
-    fd_watcher_init(&loop->wakeup_watcher, wakeup_io, pipefds[0]);
-    fd_watcher_start(loop, &loop->wakeup_watcher, POLLIN);
+    apc_event_watcher_init(&loop->wakeup_watcher, wakeup_io, pipefds[0]);
+    apc_event_watcher_register(&loop->reactor, &loop->wakeup_watcher, APC_POLLIN);
     loop->wakeup_fd = pipefds[1];
     err = tpool_init();
     if(err != 0){
@@ -107,7 +100,7 @@ pipeerr:
     pthread_mutex_destroy(&loop->workmtx);
 
 mtxerr:
-    close(loop->backend_fd);
+    apc_reactor_close(&loop->reactor);
 
 backenderr:
     return err;
@@ -119,22 +112,21 @@ void apc_loop_run(apc_loop *loop){
         loop->now = time(NULL);
         run_timers(loop);
         int timeout = get_timeout(loop);
-        fd_watcher_poll(loop, timeout);
+        apc_reactor_poll(&loop->reactor, timeout * 1000);
     }
     
     tpool_cleanup();    
-    while(!QUEUE_EMPTY(get_queue(&loop->handle_queue))){
-        queue *q = QUEUE_NEXT(get_queue(&loop->handle_queue));
+    while(!QUEUE_EMPTY(&loop->handle_queue)){
+        queue *q = QUEUE_NEXT(&loop->handle_queue);
         apc_handle *handle = container_of(q, apc_handle, handle_queue);
         QUEUE_REMOVE(q);
         apc_close(handle);
     }
+    pthread_mutex_destroy(&loop->workmtx);
+    apc_event_watcher_close(&loop->reactor, &loop->wakeup_watcher);
     close(loop->wakeup_fd);
     close(loop->wakeup_watcher.fd);
-    pthread_mutex_destroy(&loop->workmtx);
-    close(loop->backend_fd);
-    apc_free(loop->watchers);
-    loop->watchers = NULL;
+    apc_reactor_close(&loop->reactor);
 }
 
 const char *apc_strerror(enum apc_error_code_ err){
@@ -202,12 +194,12 @@ int apc_add_work(apc_loop *loop, apc_work_req *req, apc_work work, apc_work done
     assert(work != NULL);
 
     apc_request_init_(req, APC_WORK);
-    QUEUE_INIT(get_queue(&req->work_queue));
+    QUEUE_INIT(&req->work_queue);
     req->loop = loop;
     req->work = work;
     req->done = done;
     apc_register_request_(req, loop);
-    fd_watcher_start(loop, &loop->wakeup_watcher, POLLIN);
+    apc_event_watcher_register(&loop->reactor, &loop->wakeup_watcher, APC_POLLIN);
     tpool_add_work(req);
     return 0;
 }

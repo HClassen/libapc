@@ -1,24 +1,21 @@
 #ifndef APC_NET_HEADER
 #define APC_NET_HEADER
 
-#include <sys/uio.h>
-
 #include "apc.h"
 #include "apc-internal.h"
 
-#define apc_net_init_(net, fd_cb)                                       \
+#define apc_net_init_(net)                                              \
     do{                                                                 \
         (net)->alloc = NULL;                                            \
         (net)->on_read = NULL;                                          \
         (net)->write_queue_size = 0;                                    \
         QUEUE_INIT(&(net)->write_queue);                                \
         QUEUE_INIT(&(net)->write_done_queue);                           \
-        fd_watcher_init(&(net)->watcher, (fd_cb), -1);                  \
     }while(0)                                                           \
 
 #define apc_net_close_(net)                                             \
     do{                                                                 \
-        fd_watcher_close((net)->loop, &(net)->watcher);                 \
+        apc_event_watcher_close(&(net)->loop->reactor, &(net)->watcher);\
         apc_flush_write_queue((apc_net *) net);                         \
         if((net)->watcher.fd != -1){                                    \
             close((net)->watcher.fd);                                   \
@@ -30,6 +27,27 @@
         QUEUE_INIT(&(net)->write_queue);                                \
         QUEUE_INIT(&(net)->write_done_queue);                           \
     }while(0)                                                           \
+
+#define HANDLE_FIELDS                                                   \
+    void *data;                                                         \
+    apc_loop *loop;                                                     \
+    apc_handle_type type;                                               \
+    void *handle_queue[2];                                              \
+    unsigned int flags;                                                 \
+
+#define NETWORK_FIELDS                                                  \
+    apc_event_watcher watcher;                                          \
+    apc_alloc alloc;                                                    \
+    apc_on_read on_read;                                                \
+    void *write_queue[2];                                               \
+    size_t write_queue_size;                                            \
+    void *write_done_queue[2];                                          \
+
+typedef struct apc_net_ apc_net;
+struct apc_net_{
+    HANDLE_FIELDS
+    NETWORK_FIELDS
+};
 
 /* Checks connection error on socket and return it
  * @param int socket
@@ -80,5 +98,8 @@ void net_stop_read(apc_net *net);
  * @return void
  */
 int net_write(apc_net *net, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb);
+
+#undef HANDLE_FIELDS
+#undef NETWORK_FIELDS
 
 #endif

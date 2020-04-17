@@ -3,19 +3,17 @@
 
 #include "apc.h"
 
-/* sets flags on fd, returns 0 on success or -1 on error 
+/* sets the O_NONBLOCKUNG flag on fd, returns 0 on success or error code
  * @param int fd
- * @param int flags
  * @return int
  */
-int fd_set_flags(int fd, int flags);
+int fd_nonblocking(int fd);
 
-/* unsetssets flags on fd, returns 0 on success or -1 on error 
+/* sets the FD_CLOEXEC flag on fd, returns 0 on success or error code
  * @param int fd
- * @param int flags
  * @return int
  */
-int fd_unset_flags(int fd, int flags);
+int fd_cloexec(int fd);
 
 /* accepts new connection on fd and sets it to non-blocking,
  * return a new fd on success or -errno on error

@@ -141,7 +141,7 @@ int apc_file_link_tmp(apc_file *file, const char *path){
 }
 
 static void file_flush_work_queue(apc_file *file){
-    while (!QUEUE_EMPTY(get_queue(&file->work_queue))){
+    while (!QUEUE_EMPTY(&file->work_queue)){
         queue *q = QUEUE_NEXT(&file->work_queue);
         apc_file_op_req *op = container_of(q, apc_file_op_req, work_queue);
         QUEUE_REMOVE(q);
@@ -228,8 +228,8 @@ static void file_after_op(apc_work_req *req){
         free(tmp);
     }
 
-    if(!QUEUE_EMPTY(get_queue(&file->work_queue))){
-        queue *q = QUEUE_NEXT(get_queue(&file->work_queue));
+    if(!QUEUE_EMPTY(&file->work_queue)){
+        queue *q = QUEUE_NEXT(&file->work_queue);
         op = container_of(q, apc_file_op_req, work_queue);
         QUEUE_REMOVE(q);
         apc_deregister_request_(op, file->loop);
@@ -276,7 +276,7 @@ int apc_file_pread(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t 
             apc_add_work(file->loop, (apc_work_req *) req, file_read, file_after_op);
         }else{
             apc_register_request_(req, file->loop);
-            QUEUE_ADD_TAIL(get_queue(&file->work_queue), get_queue(&req->work_queue));
+            QUEUE_ADD_TAIL(&file->work_queue,&req->work_queue);
         }
         return 0;
     }
@@ -319,7 +319,7 @@ int apc_file_pwrite(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t
             apc_add_work(file->loop, (apc_work_req *) req, file_write, file_after_op);
         }else{
             apc_register_request_(req, file->loop);
-            QUEUE_ADD_TAIL(get_queue(&file->work_queue), get_queue(&req->work_queue));
+            QUEUE_ADD_TAIL(&file->work_queue, &req->work_queue);
         }
         return 0;
     }

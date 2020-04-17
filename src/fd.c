@@ -20,7 +20,7 @@
 	#define MY_IOV_MAX 1024
 #endif
 
-int fd_set_flags(int fd, int flags){
+int fd_nonblocking(int fd){
 	if(fd < 0){
 		return APC_EINVAL;
 	}
@@ -29,27 +29,31 @@ int fd_set_flags(int fd, int flags){
 	if(active_flags == -1){
         return APC_EFDFLAGS;
     }
+	if(active_flags & O_NONBLOCK){
+		return 0;
+	}
 
-    active_flags |= flags;
-    int err = fcntl(fd, F_SETFL, active_flags);
+    int err = fcntl(fd, F_SETFL, active_flags | O_NONBLOCK);
     if(err == -1){
         return APC_EFDFLAGS;
     } 
     return 0;
 }
 
-int fd_unset_flags(int fd, int flags){
+int fd_cloexec(int fd){
 	if(fd < 0){
 		return APC_EINVAL;
 	}
-
-	int active_flags = fcntl(fd, F_GETFL, 0);
+	
+	int active_flags = fcntl(fd, F_GETFD, 0);
 	if(active_flags == -1){
         return APC_EFDFLAGS;
     }
+	if(active_flags & FD_CLOEXEC){
+		return 0;
+	}
 
-    active_flags &= ~flags;
-    int err = fcntl(fd, F_SETFL, active_flags);
+    int err = fcntl(fd, F_SETFD, active_flags | FD_CLOEXEC);
     if(err == -1){
         return APC_EFDFLAGS;
     } 
@@ -79,7 +83,7 @@ int fd_accept(int fd){
 		return APC_ECONNACCEPT;
 	}
 
-	int err = fd_set_flags(client, O_NONBLOCK | O_CLOEXEC);
+	int err = fd_nonblocking(client) | fd_cloexec(client);
 	if(err){
 		close(client);
 		return err;
@@ -156,8 +160,8 @@ int fd_pipe(int pipefds[2]){
 	if(err == -1){
 		return APC_ECREATEPIPE;
 	}
-	err = fd_set_flags(pipefds[0], O_NONBLOCK | O_CLOEXEC) + \
-		  fd_set_flags(pipefds[1], O_NONBLOCK | O_CLOEXEC);
+	err = fd_nonblocking(pipefds[0]) + fd_cloexec(pipefds[0]) + \
+		  fd_nonblocking(pipefds[1]) + fd_cloexec(pipefds[1]);
 
 	if(err != 0){
 		close(pipefds[0]);

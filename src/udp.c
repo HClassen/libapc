@@ -4,13 +4,13 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <poll.h>
 #include <assert.h>
 
 #include "apc.h"
 #include "apc-internal.h"
 #include "net.h"
 #include "core.h"
+#include "reactor/reactor.h"
 
 static int udp_socket_bind(const char *port){
 	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_DGRAM, AI_PASSIVE);
@@ -39,7 +39,7 @@ int apc_udp_init(apc_loop *loop, apc_udp *udp){
     assert(udp != NULL);
 
     apc_handle_init_(udp, loop, APC_UDP);
-    apc_net_init_(udp, fd_watcher_udp_io);
+    apc_net_init_(udp);
     udp->peer = (struct sockaddr_storage) {0};
     return 0;
 }
@@ -58,8 +58,7 @@ int apc_udp_bind(apc_udp *udp, const char *port){
     if(err < 0){
         return err;
     }
-
-    udp->watcher.fd = err;
+    apc_event_watcher_init(&udp->watcher, fd_watcher_udp_io, err);
     return 0;
 }
 
@@ -71,8 +70,7 @@ int apc_udp_connect(apc_udp *udp, const char *host, const char *service){
     if(err < 0){
         return err;
     }
-
-    udp->watcher.fd = err;
+    apc_event_watcher_init(&udp->watcher, fd_watcher_udp_io, err);
     return 0;
 }
 
@@ -110,6 +108,6 @@ int apc_udp_write(apc_udp *udp, apc_write_req *req, const apc_buf bufs[], size_t
     apc_register_request_(req, udp->loop);
     apc_register_handle_(udp, udp->loop);
     udp->flags |= HANDLE_WRITABLE;
-    fd_watcher_start(udp->loop, &udp->watcher, POLLOUT);
+    apc_event_watcher_register(&udp->loop->reactor, &udp->watcher, APC_POLLOUT);
     return 0;
 }

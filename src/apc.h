@@ -77,16 +77,24 @@ typedef void (*apc_work)(apc_work_req *work);
 typedef void (*apc_on_file_op)(apc_file *file, apc_file_op_req *req, apc_buf *bufs, ssize_t nbytes);
 typedef void (*apc_on_timeout)(apc_timer *handle);
 
-typedef void (*fd_watcher_cb)(apc_loop *loop, fd_watcher *w, unsigned int events);
-struct fd_watcher_{
-    struct{
-        void *next;
-        void *prev;
-    }watcher_queue;
+typedef struct apc_reactor_ apc_reactor;
+typedef struct apc_event_watcher_ apc_event_watcher;
+
+struct apc_reactor_{
+    apc_event_watcher **event_watchers;
+    int nwatchers;
+    int nfds;
+    int backend_fd;
+    void *watcher_queue[2];
+};
+
+typedef void (*event_watcher_cb)(apc_reactor *reactor, apc_event_watcher *w, unsigned int events);
+struct apc_event_watcher_{
     int fd;
     unsigned int events;
     unsigned int registered;
-    fd_watcher_cb cb;
+    event_watcher_cb cb;
+    void *watcher_queue[2];
 };
 
 struct acp_buf_{
@@ -95,26 +103,13 @@ struct acp_buf_{
 };
 
 struct apc_loop_{
-    struct{
-        void *next;
-        void *prev;
-    }work_queue;
-    struct{
-        void *next;
-        void *prev;
-    }handle_queue;
-    struct{
-        void *next;
-        void *prev;
-    }watcher_queue;
-    fd_watcher **watchers;
-    size_t nwatchers;
-    size_t nfds;
-    int backend_fd;
+    void *work_queue[2];
+    void *handle_queue[2];
+    apc_reactor reactor;
     size_t active_handles;
     size_t active_requests;
     pthread_mutex_t workmtx;
-    fd_watcher wakeup_watcher;
+    apc_event_watcher wakeup_watcher;
     int wakeup_fd;
     struct {
         void *head;
@@ -131,10 +126,7 @@ typedef enum apc_handle_type_ {APC_BASE_HANDLE, APC_TCP, APC_UDP, APC_FILE, APC_
     void *data;                                                         \
     apc_loop *loop;                                                     \
     apc_handle_type type;                                               \
-    struct{                                                             \
-        void *next;                                                     \
-        void *prev;                                                     \
-    }handle_queue;                                                      \
+    void *handle_queue[2];                                              \
     unsigned int flags;                                                 \
 
 struct apc_handle_{
@@ -142,18 +134,12 @@ struct apc_handle_{
 };
 
 #define NETWORK_FIELDS                                                  \
-    fd_watcher watcher;                                                 \
+    apc_event_watcher watcher;                                          \
     apc_alloc alloc;                                                    \
     apc_on_read on_read;                                                \
-    struct{                                                             \
-        void *next;                                                     \
-        void *prev;                                                     \
-    }write_queue;                                                       \
+    void *write_queue[2];                                               \
     size_t write_queue_size;                                            \
-    struct{                                                             \
-        void *next;                                                     \
-        void *prev;                                                     \
-    }write_done_queue;                                                  \
+    void *write_done_queue[2];                                          \
 
 struct apc_tcp_{
     HANDLE_FIELDS
@@ -205,10 +191,7 @@ typedef enum apc_request_type_ {APC_WRITE, APC_CONNECT, APC_WORK, APC_REQ_MAX} a
 struct apc_write_req_{
     REQ_FIELDS;
     apc_handle *handle;
-    struct{
-        void *next;
-        void *prev;
-    }write_queue;
+    void *write_queue[2];
     apc_buf *bufs;
     size_t nbufs;
     size_t write_index;
@@ -226,10 +209,7 @@ struct apc_connect_req_{
 
 #define WORK_FIELDS                     \
     apc_loop *loop;                     \
-    struct{                             \
-        void *next;                     \
-        void *prev;                     \
-    }work_queue;                        \
+    void *work_queue[2];                \
     apc_work work;                      \
     apc_work done;                      \
 
@@ -255,10 +235,7 @@ struct apc_file_op_req_{
 struct apc_file_{
     HANDLE_FIELDS
     int fd;
-    struct{
-        void *next;
-        void *prev;
-    }work_queue;
+    void *work_queue[2];
     const char *path;
     struct apc_stat_ *stat;
     int active_work;

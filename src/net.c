@@ -1,6 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
-#include <string.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -8,14 +7,14 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <errno.h>
-#include <poll.h>
-#include <assert.h>
+#include <string.h>
 
 #include "apc.h"
 #include "apc-internal.h"
 #include "core.h"
 #include "net.h"
 #include "fd.h"
+#include "reactor/reactor.h"
 
 struct addrinfo fill_addrinfo(int family, int type, int flags){
 	struct addrinfo hints = (struct addrinfo) {0};
@@ -63,7 +62,7 @@ int socket_bind(struct addrinfo *res){
 		return -1;
 	}
 
-	int err = fd_set_flags(sock, O_NONBLOCK | O_CLOEXEC);
+	int err = fd_nonblocking(sock) | fd_cloexec(sock);
 	if(err != 0){
 		close(sock);
 		return err;
@@ -92,7 +91,7 @@ int socket_connect(struct addrinfo *res, struct sockaddr_storage *peeraddr){
 		return -1;
 	}
 
-	int err = fd_set_flags(sock, O_NONBLOCK | O_CLOEXEC);
+	int err = fd_nonblocking(sock) | fd_cloexec(sock);
 	if(err != 0){
 		close(sock);
 		return err;
@@ -119,15 +118,15 @@ void net_start_read(apc_net *net, apc_alloc alloc, apc_on_read on_read){
     net->on_read = on_read;
     apc_register_handle_(net, net->loop);
     net->flags |= HANDLE_READABLE;
-    fd_watcher_start(net->loop, &net->watcher, POLLIN);
+    apc_event_watcher_register(&net->loop->reactor, &net->watcher, APC_POLLIN);
 }
 
 void net_stop_read(apc_net *net){
     net->alloc = NULL;
     net->on_read = NULL;
     net->flags &= ~HANDLE_READABLE;
-    fd_watcher_stop(net->loop, &net->watcher, POLLOUT);
-    if(!fd_watcher_active(&net->watcher, POLLIN)){
+    apc_event_watcher_deregister(&net->loop->reactor, &net->watcher, APC_POLLOUT);
+    if(!apc_event_watcher_active(&net->watcher, APC_POLLIN)){
         apc_deregister_handle_(net, net->loop);
     }
 }
@@ -139,7 +138,7 @@ int net_write(apc_net *net, apc_write_req *req, const apc_buf bufs[], size_t nbu
     req->err = 0;
     req->peer = (struct sockaddr_storage) {0};
 	req->tmp = bufs[0];
-    QUEUE_INIT(get_queue(&req->write_queue));    
+    QUEUE_INIT(&req->write_queue);    
 	
     req->bufs = malloc(nbufs * sizeof(apc_buf));
     if(req->bufs == NULL){
@@ -150,7 +149,7 @@ int net_write(apc_net *net, apc_write_req *req, const apc_buf bufs[], size_t nbu
     req->nbufs = nbufs;
     req->write_index = 0;
     net->write_queue_size += apc_size_bufs(bufs, nbufs);
-    QUEUE_ADD_TAIL(get_queue(&net->write_queue), get_queue(&req->write_queue));
+    QUEUE_ADD_TAIL(&net->write_queue, &req->write_queue);
     return 0;
 }
 
