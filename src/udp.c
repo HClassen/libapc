@@ -46,7 +46,9 @@ int apc_udp_init(apc_loop *loop, apc_udp *udp){
 }
 
 void udp_close(apc_udp *udp){
-    apc_udp_stop_read(udp);
+    if(udp->flags & HANDLE_READABLE){
+        apc_udp_stop_read(udp);
+    }
     apc_net_close_(udp); 
     udp->peer = (struct sockaddr_storage) {0}; 
 }
@@ -78,7 +80,7 @@ int apc_udp_connect(apc_udp *udp, const char *host, const char *service){
 int apc_udp_start_read(apc_udp *udp, apc_alloc alloc, apc_on_read on_read){
     assert(udp != NULL);
     assert(on_read != NULL);
-    assert(udp->watcher.fd >= 0);
+    assert(udp->watcher.fd > -1);
 
     net_start_read((apc_net *) udp, alloc, on_read);
     return 0;
@@ -86,6 +88,7 @@ int apc_udp_start_read(apc_udp *udp, apc_alloc alloc, apc_on_read on_read){
 
 int apc_udp_stop_read(apc_udp *udp){
     assert(udp != NULL);
+    assert(udp->watcher.fd > -1);
 
     net_stop_read((apc_net *) udp);
     return 0;
@@ -94,6 +97,7 @@ int apc_udp_stop_read(apc_udp *udp){
 int apc_udp_write(apc_udp *udp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb){
     assert(udp != NULL);
     assert(req != NULL);
+    assert(udp->watcher.fd > -1);
     assert(nbufs > 0);
     
     if(udp->watcher.fd < 0){

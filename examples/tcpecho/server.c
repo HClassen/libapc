@@ -32,6 +32,7 @@ void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     if(nread == APC_EOF){
         printf("client disconnected\n");
         free(buf->base);
+        apc_close(handle, closed);
         return;
     }
 

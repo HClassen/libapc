@@ -62,15 +62,15 @@
         (handle)->loop = loop_;                                                                 \
         (handle)->type = type_;                                                                 \
         (handle)->flags = 0;                                                                    \
+        QUEUE_INIT(&(handle)->handle_queue);                                                    \
         QUEUE_ADD_TAIL(&(loop)->handle_queue, &(handle)->handle_queue);                         \
     }while(0)                                                                                   \
 
 #define apc_handle_close_(handle, cb)                                                           \
     do{                                                                                         \
-        apc_deregister_handle_(handle, (handle)->loop);                                         \
         QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
+        QUEUE_INIT(&(handle)->handle_queue);                                                    \
         if((cb) != NULL){                                                                       \
-            QUEUE_INIT(&(handle)->handle_queue);                                                \
             QUEUE_ADD_TAIL(&(handle)->loop->closing_queue, &(handle)->handle_queue);            \
         }                                                                                       \
         (handle)->data = NULL;                                                                  \

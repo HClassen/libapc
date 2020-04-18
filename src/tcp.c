@@ -49,7 +49,9 @@ int apc_tcp_init(apc_loop *loop, apc_tcp *tcp){
 }
 
 void tcp_close(apc_tcp *tcp){
-    apc_tcp_stop_read(tcp);
+    if(tcp->flags & HANDLE_READABLE){
+        apc_tcp_stop_read(tcp);
+    }
     apc_net_close_(tcp);
     if(tcp->accepted_fd != -1){
         close(tcp->accepted_fd);
@@ -97,7 +99,7 @@ int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const 
 int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb){
     assert(tcp != NULL);
     assert(cb != NULL);
-    assert(tcp->type == APC_TCP);
+    assert(tcp->watcher.fd > -1);
 
     int err = listen(tcp->watcher.fd, backlog);
     if(err < 0){
@@ -114,7 +116,10 @@ int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb){
 
 int apc_accept(apc_tcp *server, apc_tcp *client){
     assert(client != NULL);
-    apc_tcp_init(server->loop, client);
+    int err = apc_tcp_init(server->loop, client);
+    if(err != 0){
+        return err;
+    }
 
 /*     if(!(client->watcher.fd == -1 ||                  
         client->watcher.fd == server->accepted_fd)){
@@ -132,7 +137,7 @@ int apc_accept(apc_tcp *server, apc_tcp *client){
 int apc_tcp_start_read(apc_tcp *tcp, apc_alloc alloc, apc_on_read on_read){
     assert(tcp != NULL);
     assert(on_read != NULL);
-    assert(tcp->watcher.fd >= 0);
+    assert(tcp->watcher.fd > -1);
 
     net_start_read((apc_net *) tcp, alloc, on_read);
     return 0;
@@ -140,6 +145,7 @@ int apc_tcp_start_read(apc_tcp *tcp, apc_alloc alloc, apc_on_read on_read){
 
 int apc_tcp_stop_read(apc_tcp *tcp){
     assert(tcp != NULL);
+    assert(tcp->watcher.fd > -1);
 
     net_stop_read((apc_net *) tcp);
     return 0;
@@ -148,6 +154,7 @@ int apc_tcp_stop_read(apc_tcp *tcp){
 int apc_tcp_write(apc_tcp *tcp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb){
     assert(tcp != NULL);
     assert(req != NULL);
+    assert(tcp->watcher.fd > -1);
     assert(nbufs > 0);
     
     if(tcp->watcher.fd < 0){

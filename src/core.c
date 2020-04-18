@@ -166,7 +166,7 @@ static void core_tcp_read(apc_tcp *handle){
 	assert(handle);
 
 	ssize_t recbytes = 0;
-	while(handle->on_read != NULL && handle->watcher.fd != -1 && handle->flags & HANDLE_READABLE){
+	while(handle->on_read != NULL && handle->watcher.fd != -1 && (handle->flags & HANDLE_READABLE)){
 		assert(handle->alloc);
 		apc_buf buf = apc_buf_init(NULL, 0);
 		handle->alloc((apc_handle *) handle, &buf);
@@ -261,7 +261,7 @@ static void core_tcp_write(apc_tcp *handle){
 	assert(handle);
 	assert(handle->watcher.fd >= 0);
 
-	if(QUEUE_EMPTY(&handle->write_queue)){
+	if(QUEUE_EMPTY(&handle->write_queue) || !(handle->flags & HANDLE_WRITABLE)){
 		return;
 	}
 
@@ -355,7 +355,7 @@ void fd_watcher_tcp_io(apc_reactor *reactor, apc_event_watcher *w, unsigned int 
 static void core_udp_read(apc_udp *handle){
 	ssize_t recbytes = 0;
 	apc_buf buf;
-	while(handle->on_read != NULL && handle->watcher.fd != -1 && handle->flags & HANDLE_READABLE){
+	while(handle->on_read != NULL && handle->watcher.fd != -1 && (handle->flags & HANDLE_READABLE)){
 		assert(handle->alloc);
 		buf = apc_buf_init(NULL, 0);
 		handle->alloc((apc_handle *) handle, &buf);
@@ -398,7 +398,7 @@ static void core_udp_write(apc_udp *handle){
 	}
 
 	ssize_t n = 0;
-	while(!QUEUE_EMPTY(&handle->write_queue)){
+	while(!QUEUE_EMPTY(&handle->write_queue) && handle->flags & HANDLE_WRITABLE){
 		queue *q = QUEUE_NEXT(&handle->write_queue);
 		apc_write_req *req = container_of(q, apc_write_req, write_queue);
 

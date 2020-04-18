@@ -14,7 +14,7 @@ debug: $(FILES)
 lib: libprep libcomb libclean
 
 libprep: $(FILES)
-	$(CC) $(CFLAGS) -c $(PT) $(FILES) $(POSIX)
+	$(CC) $(CFLAGS) -g -c $(PT) $(FILES) $(POSIX)
 
 libcomb: 
 	# gcc -shared -o libapc.so  *.o  -lm

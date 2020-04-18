@@ -70,7 +70,6 @@ void timer_close(apc_timer *timer){
 
 void run_timers(apc_loop *loop){
     heap_node *node = heap_peek_head(get_heap(loop));
-
     while(node != NULL){
         apc_timer *timer = container_of(node, apc_timer, node);
         if(timer->end > loop->now){

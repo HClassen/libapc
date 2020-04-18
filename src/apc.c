@@ -18,8 +18,8 @@
 #include "queue.h"
 #include "reactor/reactor.h"
 
-#define apc_loop_active_(loop)                                          \
-    ((loop)->active_handles > 0 || (loop)->active_requests > 0)         \
+#define apc_loop_active_(loop)                                                                                  \
+    ((loop)->active_handles > 0 || (loop)->active_requests > 0 || !QUEUE_EMPTY(&(loop)->closing_queue))         \
 
 int timer_cmp(heap_node *a, heap_node *b){
     apc_timer *t1 = container_of(a, apc_timer, node);
@@ -38,6 +38,10 @@ int timer_cmp(heap_node *a, heap_node *b){
 
 static int get_timeout(apc_loop *loop){
     if(!apc_loop_active_(loop)){
+        return 0;
+    }
+
+    if(!QUEUE_EMPTY(&(loop)->closing_queue)){
         return 0;
     }
 
@@ -178,6 +182,9 @@ apc_buf apc_buf_init(void *base, size_t len){
 
 int apc_close(apc_handle *handle, apc_on_closing cb){
     assert(handle);
+    if(handle->flags & HANDLE_CLOSING){
+        return 0;
+    }
     switch(handle->type){
         case APC_UDP:
             udp_close((apc_udp *) handle);
@@ -193,7 +200,7 @@ int apc_close(apc_handle *handle, apc_on_closing cb){
             break;
         default:
             return APC_EUNKNOWNHANDLE;
-    }
+    }                                                      
     apc_handle_close_(handle, cb);                                                      
     return 0;
 }
