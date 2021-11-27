@@ -6,33 +6,7 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include "apc.h"
-#include "apc-internal.h"
 #include "net.h"
-#include "core.h"
-#include "reactor/reactor.h"
-
-static int udp_socket_bind(const char *port){
-	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_DGRAM, AI_PASSIVE);
-	struct addrinfo *res = apc_getaddrinfo(NULL, port, hints);
-	if(res == NULL){
-		return -1;
-	}
-
-	int sock = socket_bind(res);
-	return sock;
-}
-
-static int udp_socket_connect(const char *host, const char *port, struct sockaddr_storage *peeraddr){
-	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_DGRAM, 0);
-	struct addrinfo *res = apc_getaddrinfo(host, port, hints);
-	if(res == NULL){
-		return -1;
-	}
-
-	int sock = socket_connect(res, peeraddr);
-	return sock;
-}
 
 int apc_udp_init(apc_loop *loop, apc_udp *udp){
     assert(loop != NULL);
@@ -45,7 +19,7 @@ int apc_udp_init(apc_loop *loop, apc_udp *udp){
     return 0;
 }
 
-void udp_close(apc_udp *udp){
+void apc_udp_close(apc_udp *udp){
     if(udp->flags & HANDLE_READABLE){
         apc_udp_stop_read(udp);
     }
@@ -53,11 +27,14 @@ void udp_close(apc_udp *udp){
     udp->peer = (struct sockaddr_storage) {0}; 
 }
 
-int apc_udp_bind(apc_udp *udp, const char *port){
+int apc_udp_bind(apc_udp *udp, struct sockaddr *addr){
     assert(udp != NULL);
-    assert(port != NULL);
+    assert(addr != NULL);
 
-    int err = udp_socket_bind(port);
+    if(udp->watcher.fd != -1){
+        return APC_EBUSY;
+    }
+    int err = socket_bind(addr, SOCK_DGRAM);
     if(err < 0){
         return err;
     }
@@ -65,11 +42,11 @@ int apc_udp_bind(apc_udp *udp, const char *port){
     return 0;
 }
 
-int apc_udp_connect(apc_udp *udp, const char *host, const char *service){
+int apc_udp_connect(apc_udp *udp, struct sockaddr *addr){
     assert(udp != NULL);
     assert(udp->watcher.fd == -1);
 
-    int err = udp_socket_connect(host, service, &udp->peer);
+    int err = socket_connect(addr, SOCK_DGRAM, &udp->peer);
     if(err < 0){
         return err;
     }

@@ -9,11 +9,8 @@
 #include <sys/socket.h>
 
 #include "core.h"
-#include "apc.h"
-#include "net.h"
-#include "fd.h"
-#include "fs.h"
-#include "apc-internal.h"
+#include "network/net.h"
+#include "common/fd.h"
 #include "reactor/reactor.h"
 
 typedef struct apc_allocator_ apc_allocator;

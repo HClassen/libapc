@@ -1,5 +1,5 @@
-#ifndef QUEUE_HEADER
-#define QUEUE_HEADER
+#ifndef APC_QUEUE_HEADER
+#define APC_QUEUE_HEADER
 /* 
  * queue[0] = prev
  * queue[1] = next

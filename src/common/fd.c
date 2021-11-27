@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#define _DEFAULT_SOURCE
 #include <stdlib.h>
 #include <errno.h>
 #include <assert.h>
@@ -10,8 +9,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
-#include "apc.h"
-#include "apc-internal.h"
 #include "fd.h"
 
 #if defined(UIO_MAXIOV)
@@ -154,8 +151,11 @@ ssize_t fd_sendto(int fd, const apc_buf *bufs, const size_t nbufs, const struct 
 
 int fd_pipe(int pipefds[2]){
 #if defined(__linux__)
-	return pipe2(pipefds, O_NONBLOCK | O_CLOEXEC);
-#endif
+	int err = pipe2(pipefds, O_NONBLOCK | O_CLOEXEC);
+	if(err != 0){
+		return APC_ECREATEPIPE;
+	}
+#else
 	int err = pipe(pipefds);
 	if(err == -1){
 		return APC_ECREATEPIPE;
@@ -168,6 +168,7 @@ int fd_pipe(int pipefds[2]){
 		close(pipefds[1]);
 		return err;
 	}
+#endif
 	return 0;
 }
 

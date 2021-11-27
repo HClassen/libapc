@@ -7,15 +7,13 @@
 #include <limits.h>
 
 #include "apc.h"
-#include "apc-internal.h"
+#include "internal.h"
 #include "core.h"
-#include "threadpool.h"
-#include "net.h"
-#include "fd.h"
-#include "fs.h"    
-#include "timer.h"
-#include "heap.h"
-#include "queue.h"
+#include "network/net.h" 
+#include "common/fd.h" 
+#include "common/heap.h"
+#include "common/queue.h"
+#include "common/threadpool.h"
 #include "reactor/reactor.h"
 
 #define apc_loop_active_(loop)                                                                                  \
@@ -59,6 +57,25 @@ static int get_timeout(apc_loop *loop){
     return (int) diff;
 }
 
+static void run_timers(apc_loop *loop){
+    heap_node *node = heap_peek_head(get_heap(loop));
+    while(node != NULL){
+        apc_timer *timer = container_of(node, apc_timer, node);
+        if(timer->end > loop->now){
+            return;
+        }
+        apc_timer_stop(timer);
+        if(timer->restart == 1){
+            apc_timer_start(timer, timer->duration, timer->restart, timer->cb);
+        }
+
+        if(timer->cb){
+            timer->cb(timer);
+        }
+        node = heap_peek_head(get_heap(loop));
+    }
+}
+
 static void run_closing(apc_loop *loop){
     while(!QUEUE_EMPTY(&loop->closing_queue)){
         queue *q = QUEUE_NEXT(&loop->closing_queue);
@@ -92,7 +109,7 @@ int apc_loop_init(apc_loop *loop){
 
     err = pthread_mutex_init(&loop->workmtx, NULL);
     if(err != 0){
-        err = APC_ERROR;
+        err = APC_ETHREADPOOL;
         goto mtxerr;
     }
 
@@ -149,26 +166,30 @@ const char *apc_strerror(enum apc_error_code_ err){
         return (str);                   \
 
     switch(err){
-        X(success, "success")
-        X(error, "APC_ERROR: a general error occured")
-        X(inval, "APC_EINVAL: invalid argument passed")
-        X(nomem, "APC_ENOMEM: failed to allocate memory")
-        X(notsupported, "APC_ENOTSUPPORTED: functionality not supported by OS")
-        X(handleclosed, "APC_EHANDLECLOSED: handle was already closed")
-        X(unknownhandle, "APC_EUNKNOWNHANDLE: unknown handle type")
-        X(busy, "APC_EBUSY: the handle is already used")
-        X(invalidpath, "APC_EINVALIDPATH: invalid path")
-        X(createpipe, "APC_ECREATEPIPE: failed to create internal pipe")
-        X(sockbind, "APC_ESOCKBIND: failed to bind to port")
-        X(sockaccept, "APC_ECONNACCEPT: failed to accept incoming connection")
-        X(sockconnect, "APC_ECONNECT: failed to connect to remote host")
-        X(fileopen, "APC_EFILEOPEN: failed to open file")
-        X(fileexists, "APC_EFILEEXISTS: file already exists")
-        X(fdpoll, "APC_EFDPOLL: failed to poll file descriptors")
-        X(fdread, "APC_EFDREAD: failed to read from file descriptor")
-        X(fdwrite, "APC_EFDWRITE: failed to write to file descriptor")
-        X(fdflags, "APC_EFDFLAGS: failed to set flags on file descriptor")
-        X(wouldblock, "APC_EWOULDBLOCK: operation would block")
+        X(APC_SUCCESS, "success")
+        X(APC_ERROR, "APC_ERROR: a general error occured")
+        X(APC_EINVAL, "APC_EINVAL: invalid argument passed")
+        X(APC_ENOMEM, "APC_ENOMEM: failed to allocate memory")
+        X(APC_ETHREADPOOL, "APC_ETHREADPOOL: error in the threadpool")
+        X(APC_ENOTSUPPORTED, "APC_ENOTSUPPORTED: functionality not supported by OS")
+        X(APC_EHANDLECLOSED, "APC_EHANDLECLOSED: handle was already closed")
+        X(APC_EUNKNOWNHANDLE, "APC_EUNKNOWNHANDLE: unknown handle type")
+        X(APC_EBUSY, "APC_EBUSY: the handle is already used")
+        X(APC_EINVALIDPATH, "APC_EINVALIDPATH: invalid path")
+        X(APC_ECREATEPIPE, "APC_ECREATEPIPE: failed to create internal pipe")
+        X(APC_EGETADDRINFO, "APC_EGETADDRINFO: failed to call getaddrinfo")
+        X(APC_ESOCK, "APC_ESOCK: failed to create socket")
+        X(APC_ESOCKBIND, "APC_ESOCKBIND: failed to bind to port")
+        X(APC_ECONNACCEPT, "APC_ECONNACCEPT: failed to accept incoming connection")
+        X(APC_ECONNECT, "APC_ECONNECT: failed to connect to remote host")
+        X(APC_EINVALIDADDR, "APC_EINVALIDADDR: invalid internet address")
+        X(APC_EFILEOPEN, "APC_EFILEOPEN: failed to open file")
+        X(APC_EFILEEXISTS, "APC_EFILEEXISTS: file already exists")
+        X(APC_EFDPOLL, "APC_EFDPOLL: failed to poll file descriptors")
+        X(APC_EFDREAD, "APC_EFDREAD: failed to read from file descriptor")
+        X(APC_EFDWRITE, "APC_EFDWRITE: failed to write to file descriptor")
+        X(APC_EFDFLAGS, "APC_EFDFLAGS: failed to set flags on file descriptor")
+        X(APC_EWOULDBLOCK, "APC_EWOULDBLOCK: operation would block")
         default:
             return "unknown error";
     }
@@ -187,16 +208,16 @@ int apc_close(apc_handle *handle, apc_on_closing cb){
     }
     switch(handle->type){
         case APC_UDP:
-            udp_close((apc_udp *) handle);
+            apc_udp_close((apc_udp *) handle);
             break;
         case APC_TCP:
-            tcp_close((apc_tcp *) handle); 
+            apc_tcp_close((apc_tcp *) handle); 
             break;
         case APC_FILE:
-            file_close((apc_file *) handle);
+            apc_file_close((apc_file *) handle);
             break;
         case APC_TIMER:
-            timer_close((apc_timer *) handle);
+            apc_timer_close((apc_timer *) handle);
             break;
         default:
             return APC_EUNKNOWNHANDLE;

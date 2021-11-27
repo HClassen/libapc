@@ -65,10 +65,16 @@ int main(){
     apc_loop loop;
     apc_tcp server;
 
-    apc_loop_init(&loop);
+    int err = apc_loop_init(&loop);
+    if(err != 0){
+        printf("err: %d\n", err);
+        return EXIT_FAILURE;
+    }
     apc_tcp_init(&loop, &server);
 
-    apc_tcp_bind(&server, "8080");
+    struct sockaddr_in addr;
+    apc_ip4_fill("localhost", 8080, &addr);
+    apc_tcp_bind(&server, (struct sockaddr *) &addr);
     apc_listen(&server, 10, new_connection);
 
     apc_loop_run(&loop);

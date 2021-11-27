@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <stddef.h>
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -10,45 +11,30 @@
 
 /* error codes */
 enum apc_error_code_ {
-    success,
-    fileopen = -19,
-#define APC_EFILEOPEN fileopen
-    fileexists,
-#define APC_EFILEEXISTS fileexists
-    fdpoll,
-#define APC_EFDPOLL fdpoll
-    fdread,
-#define APC_EFDREAD fdread
-    fdwrite,
-#define APC_EFDWRITE fdwrite
-    fdflags,
-#define APC_EFDFLAGS fdflags
-    wouldblock,
-#define APC_EWOULDBLOCK wouldblock
-    sockbind,
-#define APC_ESOCKBIND sockbind
-    sockaccept,
-#define APC_ECONNACCEPT sockaccept
-    sockconnect,
-#define APC_ECONNECT sockconnect
-    createpipe,
-#define APC_ECREATEPIPE createpipe
-    invalidpath,
-#define APC_EINVALIDPATH invalidpath
-    busy,
-#define APC_EBUSY busy
-    unknownhandle,
-#define APC_EUNKNOWNHANDLE unknownhandle
-    handleclosed,
-#define APC_EHANDLECLOSED handleclosed
-    notsupported,
-#define APC_ENOTSUPPORTED notsupported
-    nomem,
-#define APC_ENOMEM nomem
-    inval,
-#define APC_EINVAL inval
-    error,
-#define APC_ERROR error
+    APC_SUCCESS         =   0,    
+    APC_ERROR           =  -1,
+    APC_EINVAL          =  -2,
+    APC_ENOMEM          =  -3,
+    APC_ENOTSUPPORTED   =  -4,
+    APC_EHANDLECLOSED   =  -5,
+    APC_EUNKNOWNHANDLE  =  -6,
+    APC_EBUSY           =  -7,
+    APC_ETHREADPOOL     =  -8,
+    APC_EINVALIDPATH    =  -9,
+    APC_ECREATEPIPE     = -10,
+    APC_EINVALIDADDR    = -11,
+    APC_ECONNECT        = -12,
+    APC_ECONNACCEPT     = -13,
+    APC_ESOCKBIND       = -14,
+    APC_ESOCK           = -15,
+    APC_EGETADDRINFO    = -16,
+    APC_EWOULDBLOCK     = -17,
+    APC_EFDFLAGS        = -18,
+    APC_EFDWRITE        = -19,
+    APC_EFDREAD         = -20,
+    APC_EFDPOLL         = -21,
+    APC_EFILEEXISTS     = -22,
+    APC_EFILEOPEN       = -23,
 };
 
 typedef struct apc_loop_ apc_loop;
@@ -62,6 +48,7 @@ typedef struct apc_write_req_ apc_write_req;
 typedef struct apc_write_wrapper_ apc_write_wrapper;
 typedef struct apc_connect_req_ apc_connect_req;
 typedef struct apc_work_req_ apc_work_req;
+typedef struct apc_getaddrinfo_req_ apc_getaddrinfo_req;
 typedef struct apc_file_op_req_ apc_file_op_req;
 
 typedef struct acp_buf_ apc_buf;
@@ -74,6 +61,7 @@ typedef void (*apc_on_connection)(apc_tcp *tcp, int error);
 typedef void (*apc_on_connected)(apc_tcp *tcp, apc_connect_req *req, int error);
 typedef void (*apc_on_write)(apc_write_req *req, apc_buf *bufs, int error);
 typedef void (*apc_work)(apc_work_req *work);
+typedef void (*apc_on_getaddrinfo)(apc_getaddrinfo_req *req, struct addrinfo *res, int error);
 typedef void (*apc_on_file_op)(apc_file *file, apc_file_op_req *req, apc_buf *bufs, ssize_t nbytes);
 typedef void (*apc_on_timeout)(apc_timer *handle);
 typedef void (*apc_on_closing)(apc_handle *handle);
@@ -143,6 +131,7 @@ struct apc_handle_{
     void *write_queue[2];                                               \
     size_t write_queue_size;                                            \
     void *write_done_queue[2];                                          \
+    struct sockaddr_storage peer;                                       \
 
 struct apc_tcp_{
     HANDLE_FIELDS
@@ -155,7 +144,6 @@ struct apc_tcp_{
 struct apc_udp_{
     HANDLE_FIELDS
     NETWORK_FIELDS
-    struct sockaddr_storage peer;
 };
 
 struct apc_timer_{
@@ -221,6 +209,17 @@ struct apc_work_req_{
     WORK_FIELDS
 };
 
+struct apc_getaddrinfo_req_{
+    REQ_FIELDS
+    WORK_FIELDS
+    char *host;
+    char *service;
+    struct addrinfo *hints;
+    struct addrinfo *res;
+    apc_on_getaddrinfo cb;
+    int err;
+};
+
 typedef enum apc_file_op_ {APC_FILE_READ, APC_FILE_WRITE, APC_FILE_OP_MAX} apc_file_op;
 
 struct apc_file_op_req_{
@@ -251,9 +250,8 @@ typedef enum apc_file_flags_ {
     APC_OPEN_RW = 4, 
     APC_OPEN_CREATE = 8, 
     APC_OPEN_APPEND = 16, 
-    APC_OPEN_TMP = 32, 
-    APC_OPEN_TRUNC = 64,
-    APC_FILE_FLAGS_MAX = 128
+    APC_OPEN_TRUNC = 32,
+    APC_FILE_FLAGS_MAX = 64
 }apc_file_flags;
 
 int apc_loop_init(apc_loop *loop);
@@ -271,19 +269,28 @@ int apc_set_allocator(											\
 
 apc_buf apc_buf_init(void *base, size_t len);
 
+int apc_ip4_fill(char *ip, int port, struct sockaddr_in *addr);
+int apc_ip6_fill(char *ip, int port, struct sockaddr_in6 *addr);
+int apc_ip_to_string(struct sockaddr *addr, char *dest, size_t size);
+int apc_getaddrinfo(apc_loop *loop, apc_getaddrinfo_req *req,   \
+                    struct addrinfo *hints, char *host,         \
+                    char *service, apc_on_getaddrinfo cb);      \
+int apc_freeaddrinfo(struct addrinfo *res);
+
 int apc_tcp_init(apc_loop *loop, apc_tcp *tcp);
-int apc_tcp_bind(apc_tcp *tcp, const char *port);
-int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const char *service, apc_on_connected cb);
+int apc_tcp_bind(apc_tcp *tcp, struct sockaddr *addr);
+int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, struct sockaddr *addr, apc_on_connected cb);
 int apc_tcp_write(apc_tcp *tcp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb);
 int apc_tcp_start_read(apc_tcp *tcp, apc_alloc alloc, apc_on_read on_read);
 int apc_tcp_stop_read(apc_tcp *tcp);
 
 int apc_listen(apc_tcp *tcp, int backlog, apc_on_connection cb);
 int apc_accept(apc_tcp *server, apc_tcp *client);
+int apc_reject(apc_tcp *server);
 
 int apc_udp_init(apc_loop *loop, apc_udp *udp);
-int apc_udp_bind(apc_udp *udp, const char *port);
-int apc_udp_connect(apc_udp *udp, const char *host, const char *service);
+int apc_udp_bind(apc_udp *udp, struct sockaddr *addr);
+int apc_udp_connect(apc_udp *udp, struct sockaddr *addr);
 int apc_udp_write(apc_udp *udp, apc_write_req *req, const apc_buf bufs[], size_t nbufs, apc_on_write cb);
 int apc_udp_start_read(apc_udp *udp, apc_alloc alloc, apc_on_read on_read);
 int apc_udp_stop_read(apc_udp *udp);
@@ -297,6 +304,7 @@ int apc_file_read(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t n
 int apc_file_write(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb);
 int apc_file_pread(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb, off_t offset);
 int apc_file_pwrite(apc_file *file, apc_file_op_req *req, apc_buf bufs[], size_t nbufs, apc_on_file_op cb, off_t offset);
+int apc_file_open_tmp(apc_file *file, const char *path);
 int apc_file_link_tmp(apc_file *file, const char *path);
 
 int apc_timer_init(apc_loop *loop, apc_timer *timer);

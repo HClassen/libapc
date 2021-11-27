@@ -21,19 +21,16 @@ void my_alloc(apc_handle *handle, apc_buf *buf){
 void recvd(apc_handle *handle, apc_buf *buf, ssize_t nread){
     if(nread == APC_EOF){
         printf("EOF\n");
-        free(buf->base);
-        apc_close(handle, NULL);
-        return;
     }
 
     if(nread < 0){
         printf("%s\n", apc_strerror(nread));
-        free(buf->base);
-        apc_close(handle, NULL);
-        return;
     }
 
-    printf("recvd: %s\n", buf->base);
+    if(nread > 0){
+        printf("recvd: %s\n", buf->base);
+    }
+
     free(buf->base);
     apc_close(handle, NULL);
 }
@@ -75,7 +72,9 @@ int main(int argc, char *argv[]){
     apc_loop_init(&loop);
     apc_tcp_init(&loop, &client);
 
-    apc_tcp_connect(&client, &creq, "localhost", "8080", connected);
+    struct sockaddr_in addr;
+    apc_ip4_fill("localhost", 8080, &addr);
+    apc_tcp_connect(&client, &creq, (struct sockaddr *) &addr, connected);
 
     apc_loop_run(&loop);
     return 0;

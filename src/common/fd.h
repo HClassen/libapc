@@ -1,7 +1,8 @@
-#ifndef FD_HEADER
-#define FD_HEADER
+#ifndef APC_FD_HEADER
+#define APC_FD_HEADER
 
-#include "apc.h"
+#include "../apc.h"
+#include "../internal.h"
 
 /* sets the O_NONBLOCKUNG flag on fd, returns 0 on success or error code
  * @param int fd

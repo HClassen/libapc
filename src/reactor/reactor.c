@@ -8,8 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../apc.h"
-#include "../apc-internal.h"
+#include "../internal.h"
 
 #if defined(__linux__)
     #include <sys/epoll.h>
@@ -112,7 +111,7 @@ static void maybe_resize(apc_reactor *reactor, int len){
 
 static int create_backend_fd(){
     int pollfd = -1;
-#if defined(__linux__) 
+#if defined(__linux__)
 	pollfd = epoll_create1(EPOLL_CLOEXEC);
     if(pollfd > 0){
         return pollfd;

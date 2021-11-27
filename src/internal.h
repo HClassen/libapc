@@ -2,12 +2,17 @@
 #define APC_INTERNAL_HEADER
 
 #include <stddef.h>
-#include <stdio.h>
 #include <assert.h>
 
 #include "apc.h"
-#include "queue.h"
-#include "heap.h"
+#include "common/queue.h"
+
+#ifdef DEBUG
+    #include <stdio.h>
+    #define DEBUG_MSG(msg, ...) do{fprintf(stdout,"%s:%d:%s(): " msg, __FILE__, __LINE__, __func__, ##__VA_ARGS__);}while(0)
+#else
+    #define DEBUG_MSG(msg, ...)
+#endif
 
 #define container_of(ptr, type, member) ((type *)  ((char *) ptr - offsetof(type, member)))
 #define get_node(timer) ((heap_node *) &(timer)->node)
@@ -17,12 +22,6 @@
 #define HANDLE_WRITABLE 2
 #define HANDLE_READABLE 4
 #define HANDLE_CLOSING  8
-
-#ifdef DEBUG
-    #define DEBUG_MSG(msg, ...) do{fprintf(stdout,"%s:%d:%s(): " msg, __FILE__, __LINE__, __func__, ##__VA_ARGS__);}while(0)
-#else
-    #define DEBUG_MSG(msg, ...)
-#endif
 
 #define apc_register_handle_(handle, loop)                                                      \
     do{                                                                                         \
@@ -70,6 +69,7 @@
     do{                                                                                         \
         QUEUE_REMOVE(&(handle)->handle_queue);                                                  \
         QUEUE_INIT(&(handle)->handle_queue);                                                    \
+        apc_deregister_handle_(handle, (handle)->loop);                                         \
         if((cb) != NULL){                                                                       \
             QUEUE_ADD_TAIL(&(handle)->loop->closing_queue, &(handle)->handle_queue);            \
         }                                                                                       \
@@ -94,5 +94,29 @@ void *apc_malloc(size_t size);
 void *apc_calloc(size_t n, size_t size);
 
 void *apc_realloc(void *ptr, size_t size);
+
+/* closes an apc_file handle
+ * @param apf_file *file
+ * @return void 
+ */
+void apc_file_close(apc_file *file);
+
+/* closes an apc_udp handle
+ * @param apc_tcp *tcp
+ * @return void
+ */
+void apc_tcp_close(apc_tcp *tcp);
+
+/* closes an apc_udp handle
+ * @param apc_tcp *tcp
+ * @return void
+ */
+void apc_udp_close(apc_udp *udp);
+
+/* close a apc_timer handle
+ * @param apc_timer *timer
+ * @return void
+ */
+void apc_timer_close(apc_timer *timer);
 
 #endif

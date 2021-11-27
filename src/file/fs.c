@@ -1,4 +1,4 @@
-#define _XOPEN_SOURCE 500
+// #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,23 +11,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "apc.h"
-#include "fd.h"
-#include "fs.h"
-#include "apc-internal.h"
-
-#if defined(PATH_MAX)
-    #define MY_PATH_MAX PATH_MAX
-#else
-
-#endif
+#include "../apc.h"
+#include "../internal.h"
+#include "../common/fd.h"
 
 static int file_open(apc_file *file, const char *path, apc_file_flags flags){
-/*     char result[MY_PATH_MAX]; 
-    if(realpath(path, result) == NULL){
-        DEBUG_MSG("invalid path\n");
-        return APC_EFILEPATH;
-    } */
     mode_t mode = 0;
     if(flags & APC_OPEN_R){
         file->oflags |= O_RDONLY;
@@ -58,26 +46,7 @@ static int file_open(apc_file *file, const char *path, apc_file_flags flags){
         file->oflags |= O_APPEND;
     }
 
-    if(flags & APC_OPEN_TMP){
-        file->oflags |= O_TMPFILE;
-        mode |= S_IRUSR | S_IWUSR;
-    }
-
     file->fd = open(path, file->oflags | O_CLOEXEC, mode);
-
-    size_t size = strlen(path);
-    char *fpath = NULL;
-    if(file->fd == -1 && (errno == EISDIR || errno == ENOENT) && (flags & APC_OPEN_TMP)){
-        fpath = apc_malloc((14 + size + 1) * sizeof(char));
-        if(fpath == NULL){
-            return APC_ENOMEM;
-        }
-
-        memcpy(fpath, path, size);
-        memcpy(fpath + size, "apc-tmp-XXXXXX", 15);
-        file->fd = mkostemp(fpath, O_CLOEXEC);
-        unlink(fpath);
-    }
 
     if(file->fd == -1){
         if(errno == EEXIST){
@@ -89,18 +58,47 @@ static int file_open(apc_file *file, const char *path, apc_file_flags flags){
         return APC_EFILEOPEN;
     }
 
+    size_t size = strlen(path);
+    char *fpath = apc_malloc((size + 1) * sizeof(char));
     if(fpath == NULL){
-        fpath = apc_malloc((size + 1) * sizeof(char));
-        if(fpath == NULL){
-            return APC_ENOMEM;
-        }
-        memcpy(fpath, path, size);
-        fpath[size] = 0;
+        return APC_ENOMEM;
     }
-
+    memcpy(fpath, path, size);
+    fpath[size] = 0;
     file->path = fpath;
     return 0;
 } 
+
+static int file_open_tmp(apc_file *file, const char *path){
+#if defined(__linux__)
+    file->oflags |= O_TMPFILE | O_RDWR;
+    mode_t mode = S_IRUSR | S_IWUSR;
+    int err = open(path, file->oflags | O_CLOEXEC, mode);
+    if(err > 0){
+        file->fd = err;
+        return 0;
+    }
+#endif
+
+    size_t size = strlen(path);
+    char *fpath = NULL;
+    fpath = apc_malloc((14 + size + 1) * sizeof(char));
+    if(fpath == NULL){
+        return APC_ENOMEM;
+    }
+
+    memcpy(fpath, path, size);
+    memcpy(fpath + size, "apc-tmp-XXXXXX", 15);
+    file->fd = mkostemp(fpath, O_CLOEXEC);
+
+    if(file->fd < 0){
+        return APC_EFILEOPEN;
+    }
+
+    unlink(fpath);
+    file->path = fpath;
+    return 0;
+}
 
 int apc_file_init(apc_loop *loop, apc_file *file){
     assert(loop != NULL);
@@ -124,8 +122,15 @@ int apc_file_open(apc_file *file, const char *path, apc_file_flags flags){
     return file_open(file, path, flags);
 }
 
+int apc_file_open_tmp(apc_file *file, const char *path){
+    assert(file != NULL);
+    assert(path != NULL);
+    assert(file->fd == -1);
+    return file_open_tmp(file, path);
+}
+
 int apc_file_link_tmp(apc_file *file, const char *path){
-    assert(file->oflags & O_TMPFILE);
+    assert(file->oflags & __O_TMPFILE);
     char fpath[PATH_MAX];
     snprintf(fpath, PATH_MAX,  "/proc/self/fd/%d", file->fd);
     int err = linkat(AT_FDCWD, fpath, AT_FDCWD, path, AT_SYMLINK_FOLLOW);
@@ -154,11 +159,13 @@ static void file_flush_work_queue(apc_file *file){
     }    
 }
 
-void file_close(apc_file *file){
+void apc_file_close(apc_file *file){
     file_flush_work_queue(file);  
     QUEUE_INIT(&file->work_queue);
-    close(file->fd);              
-    file->fd = -1;     
+    if(file->fd > -1){
+        close(file->fd);     
+    }           
+    file->fd = -1;  
     file->oflags = 0;           
     if(file->path != NULL){       
         apc_free((char *) file->path);

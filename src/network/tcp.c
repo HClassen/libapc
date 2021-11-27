@@ -6,34 +6,7 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include "apc.h"
-#include "apc-internal.h"
 #include "net.h"
-#include "core.h"
-#include "reactor/reactor.h"
-
-static int tcp_socket_bind(const char *port){
-	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_STREAM, AI_PASSIVE);
-	struct addrinfo *res = apc_getaddrinfo(NULL, port, hints);
-	if(res == NULL){
-		return -1;
-	}
-
-	int sock = socket_bind(res);
-	return sock;
-}
-
-static int tcp_socket_connect(const char *host, const char *port){
-	struct addrinfo hints = fill_addrinfo(AF_UNSPEC, SOCK_STREAM, AI_PASSIVE);
-	struct addrinfo *res = apc_getaddrinfo(host, port, hints);
-	if(res == NULL){
-		return -1;
-	}
-
-	struct sockaddr_storage tmp;
-	int sock = socket_connect(res, &tmp);
-	return sock;
-}
 
 int apc_tcp_init(apc_loop *loop, apc_tcp *tcp){
     assert(loop != NULL);
@@ -48,7 +21,7 @@ int apc_tcp_init(apc_loop *loop, apc_tcp *tcp){
     return 0;
 }
 
-void tcp_close(apc_tcp *tcp){
+void apc_tcp_close(apc_tcp *tcp){
     if(tcp->flags & HANDLE_READABLE){
         apc_tcp_stop_read(tcp);
     }
@@ -61,11 +34,14 @@ void tcp_close(apc_tcp *tcp){
     tcp->on_connection = NULL;
 }
 
-int apc_tcp_bind(apc_tcp *tcp, const char *port){
+int apc_tcp_bind(apc_tcp *tcp, struct sockaddr *addr){
     assert(tcp != NULL);
-    assert(port != NULL);
+    assert(addr != NULL);
 
-    int err = tcp_socket_bind(port);
+    if(tcp->watcher.fd != -1){
+        return APC_EBUSY;
+    }
+    int err = socket_bind(addr, SOCK_STREAM);
     if(err < 0){
         return err;
     }
@@ -74,13 +50,12 @@ int apc_tcp_bind(apc_tcp *tcp, const char *port){
     return 0;
 }
 
-int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, const char *host, const char *service, apc_on_connected cb){
+int apc_tcp_connect(apc_tcp *tcp, apc_connect_req *req, struct sockaddr *addr, apc_on_connected cb){
     assert(tcp != NULL);
     assert(req != NULL);
-    assert(cb != NULL);
     assert(tcp->watcher.fd == -1);
 
-    int err = tcp_socket_connect(host, service);
+    int err = socket_connect(addr, SOCK_STREAM, &tcp->peer);
     if(err < 0){
         return err;
     }
@@ -128,8 +103,17 @@ int apc_accept(apc_tcp *server, apc_tcp *client){
     if(server->accepted_fd == -1){                    
         return APC_ECONNACCEPT;                                      
     }
+    socklen_t size = sizeof(struct sockaddr_storage);
+    getpeername(server->accepted_fd, (struct sockaddr *) &client->peer, &size);
     apc_event_watcher_init(&client->watcher, fd_watcher_tcp_io, server->accepted_fd);                         
     apc_event_watcher_register(&server->loop->reactor, &client->watcher, APC_POLLIN);     
+    server->accepted_fd = -1;
+    return 0;
+}
+
+int apc_reject(apc_tcp *server){
+    assert(server->accepted_fd > -1);
+    close(server->accepted_fd);
     server->accepted_fd = -1;
     return 0;
 }

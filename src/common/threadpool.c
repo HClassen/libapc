@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 #include "threadpool.h"
-#include "apc-internal.h"
 #include "queue.h"
 
 static pthread_mutex_t mutex;
@@ -71,13 +70,13 @@ static void *thread_routine(/* void *arg */){
 
 int tpool_start(){
     if(nthreads == 0){
-        return -1;
+        return APC_EINVAL;
     }
     
     pthread_mutex_lock(&mutex);
     for(unsigned int i = 0; i<nthreads; i++){
         if(pthread_create(&threads[i], NULL, &thread_routine, (void *) &nr[i]) != 0){
-            return -1;
+            return APC_ETHREADPOOL;
         }
     }
     running = 1;
@@ -90,11 +89,11 @@ int tpool_init(){
     idle_threads = 0;
 
     if(pthread_mutex_init(&mutex, NULL) != 0){
-        return -1;
+        return APC_ETHREADPOOL;
     }
 
     if(pthread_cond_init(&cond, NULL) != 0){
-        return -1;
+        return APC_ETHREADPOOL;
     }
 
     QUEUE_INIT(&wq);

@@ -1,11 +1,10 @@
 #include <assert.h>
 #include <limits.h>
 
-#include "apc.h"
-#include "apc-internal.h"
-#include "queue.h"
-#include "heap.h"
-#include "timer.h"
+#include "../apc.h"
+#include "../internal.h"
+#include "../common/queue.h"
+#include "../common/heap.h"
 
 int apc_timer_init(apc_loop *loop, apc_timer *timer){
     assert(loop != NULL);
@@ -60,29 +59,10 @@ int apc_timer_restart(apc_timer *timer){
     return 0;
 }
 
-void timer_close(apc_timer *timer){
+void apc_timer_close(apc_timer *timer){
     apc_timer_stop(timer);
     timer->duration = -1;
     timer->end = -1;
     timer->restart = 0;
     timer->cb = NULL;
-}
-
-void run_timers(apc_loop *loop){
-    heap_node *node = heap_peek_head(get_heap(loop));
-    while(node != NULL){
-        apc_timer *timer = container_of(node, apc_timer, node);
-        if(timer->end > loop->now){
-            return;
-        }
-        apc_timer_stop(timer);
-        if(timer->restart == 1){
-            apc_timer_start(timer, timer->duration, timer->restart, timer->cb);
-        }
-
-        if(timer->cb){
-            timer->cb(timer);
-        }
-        node = heap_peek_head(get_heap(loop));
-    }
 }

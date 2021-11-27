@@ -2,7 +2,7 @@
 #define APC_CORE_HEADER
 
 #include "apc.h"
-#include "apc-internal.h"
+#include "internal.h"
 
 typedef struct apc_net_ apc_net;
 

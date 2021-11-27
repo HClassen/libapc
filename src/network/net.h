@@ -1,14 +1,18 @@
 #ifndef APC_NET_HEADER
 #define APC_NET_HEADER
 
-#include "apc.h"
-#include "apc-internal.h"
+#include "../apc.h"
+#include "../internal.h"
+#include "../core.h"
+#include "../common/fd.h"
+#include "../reactor/reactor.h"
 
 #define apc_net_init_(net)                                              \
     do{                                                                 \
         (net)->alloc = NULL;                                            \
         (net)->on_read = NULL;                                          \
         (net)->write_queue_size = 0;                                    \
+        (net)->peer = (struct sockaddr_storage) {0};                    \
         QUEUE_INIT(&(net)->write_queue);                                \
         QUEUE_INIT(&(net)->write_done_queue);                           \
     }while(0)                                                           \
@@ -24,6 +28,7 @@
         (net)->alloc = NULL;                                            \
         (net)->on_read = NULL;                                          \
         (net)->write_queue_size = 0;                                    \
+        (net)->peer = (struct sockaddr_storage) {0};                    \
         QUEUE_INIT(&(net)->write_queue);                                \
         QUEUE_INIT(&(net)->write_done_queue);                           \
     }while(0)                                                           \
@@ -43,6 +48,7 @@
     void *write_queue[2];                                               \
     size_t write_queue_size;                                            \
     void *write_done_queue[2];                                          \
+    struct sockaddr_storage peer;                                       \
 
 typedef struct apc_net_ apc_net;
 struct apc_net_{
@@ -56,25 +62,20 @@ struct apc_net_{
  */
 int socket_connect_error(int socket);
 
-struct addrinfo fill_addrinfo(int family, int type, int flags);
-
-struct addrinfo *apc_getaddrinfo(const char *host, const char *port, struct addrinfo hints);
-
-int socket_bind(struct addrinfo *res);
-
-int socket_connect(struct addrinfo *res, struct sockaddr_storage *peeraddr);
-
-/* closes an apc_udp handle
- * @param apc_tcp *tcp
- * @return void
+/* Create and bind a socket of type to addr 
+ * @param const struct sockaddr *addr
+ * @param int type
+ * @return int
  */
-void tcp_close(apc_tcp *tcp);
+int socket_bind(struct sockaddr *addr, int type);
 
-/* closes an apc_udp handle
- * @param apc_tcp *tcp
- * @return void
+/* Create and connect a socket of type to addr 
+ * @param const struct sockaddr *addr
+ * @param int type
+ * @param struct sockaddr_storage *peeraddr
+ * @return int
  */
-void udp_close(apc_udp *udp);
+int socket_connect(struct sockaddr *addr, int type, struct sockaddr_storage *peeraddr);
 
 /* start reading on an apc_net handle
  * @param apc_net *net
